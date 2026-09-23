@@ -772,15 +772,15 @@
 
   /* ================= GESTOR / EDITOR VIEW ================= */
   function tabsForPapel(papel){
-    if(papel==='admin') return ['quadro','tecnicos','projetos','concluidos','relatorios','usuarios'];
-    if(papel==='editor') return ['quadro','tecnicos','projetos','concluidos','relatorios'];
+    if(papel==='admin') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios','usuarios'];
+    if(papel==='editor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
     if(papel==='planejador') return ['quadro','projetos','concluidos','relatorios'];
-    if(papel==='supervisor') return ['quadro','tecnicos','projetos','concluidos','relatorios'];
+    if(papel==='supervisor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
     return ['quadro','tecnicos','projetos','concluidos','relatorios'];
   }
   function canAllocate(papel){ return ['admin','editor','supervisor'].includes(papel); }
   function canManageProjetos(papel){ return ['admin','editor','planejador'].includes(papel); }
-  const TAB_LABEL = {quadro:'Quadro', tecnicos:'Técnicos', projetos:'Projetos', concluidos:'Concluídos', relatorios:'Relatórios', usuarios:'Usuários'};
+  const TAB_LABEL = {quadro:'Quadro', tecnicos:'Técnicos', ferias:'Férias', projetos:'Projetos', concluidos:'Concluídos', relatorios:'Relatórios', usuarios:'Usuários'};
 
   function renderGestorView(){
     const tabs = tabsForPapel(currentUser.papel);
@@ -818,6 +818,8 @@
       wrap.appendChild(renderLegend());
     } else if(activeTab==='tecnicos'){
       wrap.appendChild(renderTecnicosManage());
+    } else if(activeTab==='ferias'){
+      wrap.appendChild(renderFeriasManage());
     } else if(activeTab==='projetos'){
       wrap.appendChild(renderProjetosManage());
     } else if(activeTab==='concluidos'){
@@ -995,6 +997,115 @@
       ));
     });
     if(TECNICOS.length===0) list.appendChild(el('div',{class:'empty'}, 'Nenhum técnico cadastrado.'));
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  /* ================= gerenciar férias ================= */
+  function feriasAllocs(){ return allocations.filter(a=>a.ferias); }
+  const STATUS_FERIAS = ['Solicitado','Agendado','Confirmado'];
+  let editingFeriasLimiteId = null, feriasLimiteDraft = '';
+  let editingFeriasId = null, editFeriasDraft = null;
+
+  function renderFeriasManage(){
+    const wrap = el('div',{class:'manage-wrap'});
+    wrap.appendChild(el('h2',{}, 'Férias'));
+    wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'}, 'Data limite de férias por técnico, períodos solicitados/agendados e quem está de férias agora. Períodos criados aqui aparecem automaticamente no Quadro como Indisponibilidade.'));
+
+    const today = startOfDay(new Date());
+    const emFerias = feriasAllocs().filter(a=> fromISO(a.inicio)<=today && today<=fromISO(a.fim));
+
+    wrap.appendChild(el('div',{class:'section-title'}, 'De férias agora'));
+    if(emFerias.length===0){
+      wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:16px;'}, 'Ninguém de férias no momento.'));
+    } else {
+      const l = el('div',{class:'manage-list', style:'margin-bottom:16px;'});
+      emFerias.forEach(a=> l.appendChild(el('div',{class:'manage-item'},
+        el('div',{class:'info'}, el('b',{}, tecById(a.tecnicoId).nome), el('span',{}, fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim)))))));
+      wrap.appendChild(l);
+    }
+
+    wrap.appendChild(el('div',{class:'section-title'}, 'Data limite de férias por técnico'));
+    const limiteList = el('div',{class:'manage-list', style:'margin-bottom:20px;'});
+    TECNICOS.forEach(t=>{
+      if(editingFeriasLimiteId===t.id){
+        limiteList.appendChild(el('div',{class:'manage-item'},
+          el('div',{class:'info'}, el('b',{}, t.nome)),
+          el('div',{class:'manage-actions'},
+            el('input',{type:'date', value:feriasLimiteDraft, onchange:(e)=>feriasLimiteDraft=e.target.value}),
+            el('button',{class:'btn small', onclick: async ()=>{
+              try{ await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasLimite:feriasLimiteDraft})}); editingFeriasLimiteId=null; await loadData(); render(); }
+              catch(e){ alert(e.error||'Erro ao salvar.'); }
+            }}, 'Salvar'),
+            el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasLimiteId=null; render(); }}, 'Cancelar')
+          )
+        ));
+        return;
+      }
+      const limite = t.feriasLimite;
+      let alerta = null;
+      if(limite){
+        const dias = diffDays(fromISO(limite), today);
+        if(dias<0) alerta = el('span',{class:'status-badge status-indisp'}, 'Venceu');
+        else if(dias<=60) alerta = el('span',{class:'status-badge status-campo'}, dias+'d restantes');
+      }
+      limiteList.appendChild(el('div',{class:'manage-item'},
+        el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, limite ? ('Limite: '+fmtLong(fromISO(limite))) : 'Sem data limite definida')),
+        el('div',{class:'manage-actions'},
+          alerta,
+          el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasLimiteId=t.id; feriasLimiteDraft=t.feriasLimite||''; render(); }}, 'Editar')
+        )
+      ));
+    });
+    wrap.appendChild(limiteList);
+
+    let novo = {tecnicoId: TECNICOS[0]&&TECNICOS[0].id, statusFerias:'Solicitado', inicio:toISO(new Date()), fim:toISO(new Date()), notas:''};
+    wrap.appendChild(el('div',{class:'section-title'}, 'Registrar período de férias'));
+    wrap.appendChild(el('div',{class:'manage-form'},
+      TECNICOS.length ? el('div',{class:'field'}, el('label',{},'Técnico'), selectEl(novo.tecnicoId, TECNICOS, v=>novo.tecnicoId=v, t=>t.nome)) : el('div',{class:'sub'},'Cadastre um técnico primeiro.'),
+      el('div',{class:'field'}, el('label',{},'Status'), selectEl(novo.statusFerias, STATUS_FERIAS, v=>novo.statusFerias=v)),
+      el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:novo.inicio, onchange:(e)=>novo.inicio=e.target.value})),
+      el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:novo.fim, onchange:(e)=>novo.fim=e.target.value})),
+      el('div',{class:'field'}, el('label',{},'Notas (opcional)'), el('input',{type:'text', oninput:(e)=>novo.notas=e.target.value})),
+      el('button',{class:'btn', onclick: async ()=>{
+        if(!novo.tecnicoId || !novo.inicio || !novo.fim || novo.fim<novo.inicio) return;
+        try{
+          await api('/api/allocations', {method:'POST', body:JSON.stringify({tecnicoId:novo.tecnicoId, tipo:'Indisponibilidade', obra:'Férias', local:'—', inicio:novo.inicio, fim:novo.fim, notas:novo.notas, ferias:true, statusFerias:novo.statusFerias})});
+          await loadData(); render();
+        }catch(e){ alert(e.error||'Erro ao registrar.'); }
+      }}, '+ Registrar período')
+    ));
+
+    wrap.appendChild(el('div',{class:'section-title'}, 'Períodos registrados'));
+    const list = el('div',{class:'manage-list'});
+    feriasAllocs().slice().sort((a,b)=> fromISO(b.inicio)-fromISO(a.inicio)).forEach(a=>{
+      if(editingFeriasId===a.id){
+        const d = editFeriasDraft;
+        list.appendChild(el('div',{class:'manage-form'},
+          el('div',{class:'field'}, el('label',{},'Status'), selectEl(d.statusFerias, STATUS_FERIAS, v=>d.statusFerias=v)),
+          el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:d.inicio, onchange:(e)=>d.inicio=e.target.value})),
+          el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:d.fim, onchange:(e)=>d.fim=e.target.value})),
+          el('button',{class:'btn', onclick: async ()=>{
+            try{ await api('/api/allocations?id='+a.id, {method:'PATCH', body:JSON.stringify({action:'edit_ferias', inicio:d.inicio, fim:d.fim, statusFerias:d.statusFerias})}); editingFeriasId=null; await loadData(); render(); }
+            catch(e){ alert(e.error||'Erro ao salvar.'); }
+          }}, 'Salvar'),
+          el('button',{class:'btn ghost', onclick:()=>{ editingFeriasId=null; render(); }}, 'Cancelar')
+        ));
+        return;
+      }
+      list.appendChild(el('div',{class:'manage-item'},
+        el('div',{class:'info'}, el('b',{}, tecById(a.tecnicoId).nome),
+          el('span',{}, (a.statusFerias||'—')+' · '+fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim)))),
+        el('div',{class:'manage-actions'},
+          el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado'}; render(); }}, 'Editar'),
+          el('button',{class:'btn danger small', onclick: async ()=>{
+            try{ await api('/api/allocations?id='+a.id, {method:'DELETE'}); await loadData(); render(); }
+            catch(e){ alert(e.error||'Erro ao excluir.'); }
+          }}, 'Excluir')
+        )
+      ));
+    });
+    if(feriasAllocs().length===0) list.appendChild(el('div',{class:'empty'}, 'Nenhum período registrado.'));
     wrap.appendChild(list);
     return wrap;
   }

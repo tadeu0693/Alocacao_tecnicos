@@ -43,10 +43,10 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       if (!['admin','editor','supervisor'].includes(user.papel)) return res.status(403).json({ error: 'Sem permissão.' });
-      const { tecnicoId, projetoId, tipo, obra, local, endereco, latitude, longitude, inicio, fim, horaInicio, horaFim, notas, emergencial, emergencialModo } = req.body || {};
+      const { tecnicoId, projetoId, tipo, obra, local, endereco, latitude, longitude, inicio, fim, horaInicio, horaFim, notas, emergencial, emergencialModo, ferias, statusFerias } = req.body || {};
       if (!tecnicoId || !obra || !inicio || !fim) return res.status(400).json({ error: 'Dados incompletos.' });
       let allocations = await getJSON('allocations', []);
-      const novo = { id: crypto.randomUUID(), tecnicoId, projetoId: projetoId || null, tipo: tipo || 'Implantação', obra, local: local || '', endereco: endereco || '', latitude: latitude || '', longitude: longitude || '', inicio, fim, horaInicio: horaInicio || '', horaFim: horaFim || '', notas: notas || '', anexos: [], horasExtras: [], despesas: [], emergencial: !!emergencial };
+      const novo = { id: crypto.randomUUID(), tecnicoId, projetoId: projetoId || null, tipo: tipo || 'Implantação', obra, local: local || '', endereco: endereco || '', latitude: latitude || '', longitude: longitude || '', inicio, fim, horaInicio: horaInicio || '', horaFim: horaFim || '', notas: notas || '', anexos: [], horasExtras: [], despesas: [], emergencial: !!emergencial, ferias: !!ferias, statusFerias: statusFerias || null };
       allocations.push(novo);
       if (emergencial && inicio === fim) {
         allocations = reallocateForEmergency(allocations, tecnicoId, inicio, emergencialModo || 'dia', horaInicio, horaFim, novo.id);
@@ -154,6 +154,18 @@ export default async function handler(req, res) {
         allocations[idx] = alloc;
         await setJSON('allocations', allocations);
         return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'edit_ferias') {
+        if (!canManage) return res.status(403).json({ error: 'Sem permissão.' });
+        const { inicio, fim, statusFerias, notas: notaF } = req.body || {};
+        if (inicio !== undefined) alloc.inicio = inicio;
+        if (fim !== undefined) alloc.fim = fim;
+        if (statusFerias !== undefined) alloc.statusFerias = statusFerias;
+        if (notaF !== undefined) alloc.notas = notaF;
+        allocations[idx] = alloc;
+        await setJSON('allocations', allocations);
+        return res.status(200).json({ allocation: alloc });
       }
 
       return res.status(400).json({ error: 'Ação inválida.' });
