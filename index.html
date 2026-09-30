@@ -869,7 +869,7 @@
       wrap.appendChild(el('div',{class:'tech-row'+(selectedTech===t.id?' selected':''),
         onclick:()=>{ selectedTech = selectedTech===t.id ? null : t.id; render(); }},
         el('div',{class:'tech-name'}, t.nome), el('div',{class:'tech-meta'}, t.cargo+' · '+t.local),
-        el('span',{class:'status-badge '+st.cls}, st.label)));
+        el('span',{class:'status-badge '+st.cls}, st.label), feriasAlertaSpan(t)));
     });
     if(list.length===0) wrap.appendChild(el('div',{class:'empty'}, 'Nenhum técnico encontrado.'));
     return wrap;
@@ -1002,83 +1002,208 @@
   }
 
   /* ================= gerenciar férias ================= */
-  function feriasAllocs(){ return allocations.filter(a=>a.ferias); }
+  const FERIAS_KNOWN = {
+    "TAILON DA SILVA GRABIN":"2024-01-22","RICARDO DONIZETE DE SOUSA":"2021-01-06","REYNALDO DA SILVA CONTE":"2019-09-20",
+    "CARLOS AUGUSTO GOMES DOS SANTOS":"2024-06-17","BRENO HAYAN LEITE GONCALVES":"2022-08-08","FRANCISCO PAULO MARTINS SILVA":"2022-11-14",
+    "JOSE RENATO RODRIGUES SILVA":"2022-11-28","VAGNER LIMA DA COSTA":"2018-10-16","JOSE ROBERTO DE MORAIS JUNIOR":"2025-06-16"
+  };
   const STATUS_FERIAS = ['Solicitado','Agendado','Confirmado'];
-  let editingFeriasLimiteId = null, feriasLimiteDraft = '';
-  let editingFeriasId = null, editFeriasDraft = null;
+  let editingFeriasId = null, editFeriasDraft = null, novoFerias = null;
+
+  function normNome(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim(); }
+  function addYearsDate(iso, n){ const d = fromISO(iso); d.setFullYear(d.getFullYear()+n); return d; }
+  function isFeriasAlloc(a){ return !!a.ferias || (a.tipo==='Indisponibilidade' && normNome(a.obra)==='FERIAS'); }
+  function feriasAllocs(){ return allocations.filter(isFeriasAlloc); }
+  function diasDe(a){ return diffDays(fromISO(a.fim), fromISO(a.inicio)) + 1; }
+
+  // Aquisitivo = 12 meses desde a admissão; concessivo = 12 meses seguintes.
+  // Prazo para INICIAR = fim do concessivo - 29 dias (os 30 dias terminam dentro do prazo).
+  function feriasPeriodo(t){
+    const today = startOfDay(new Date());
+    const fer = feriasAllocs().filter(a=>a.tecnicoId===t.id);
+    const mk = (extra)=>{
+      const aProg = Math.max(0, 30-extra.gozados-extra.prog);
+      const dLimite = diffDays(extra.limite, today);
+      let nivel;
+      if(aProg===0) nivel = extra.prog>0 ? {label:'Programada', cls:'status-campo', rank:0} : {label:'Quitada', cls:'status-livre', rank:0};
+      else if(dLimite<0) nivel = {label:'Vencida', cls:'status-indisp', rank:3};
+      else if(dLimite<=60) nivel = {label:'Crítico · '+dLimite+'d', cls:'status-indisp', rank:2};
+      else if(dLimite<=120) nivel = {label:'Atenção · '+dLimite+'d', cls:'', rank:1, amber:true};
+      else nivel = {label:'No prazo · '+dLimite+'d', cls:'status-livre', rank:0};
+      return Object.assign({t, aProg, dLimite, nivel}, extra);
+    };
+    if(t.admissao){
+      let k = 0;
+      while(addDays(addYearsDate(t.admissao,k+1),-1) < today) k++;
+      if(k<1) return {emAquisicao:{ini:addYearsDate(t.admissao,k), fim:addDays(addYearsDate(t.admissao,k+1),-1)}};
+      const ini = addYearsDate(t.admissao,k-1);
+      const fim = addDays(addYearsDate(t.admissao,k),-1);
+      const fimConc = addYearsDate(toISO(fim),1);
+      const limite = addDays(fimConc,-29);
+      let gozados = 0, prog = 0;
+      fer.forEach(a=>{
+        const s = fromISO(a.inicio);
+        if(s>fim && s<=fimConc){ if(fromISO(a.fim)<today) gozados += diasDe(a); else prog += diasDe(a); }
+      });
+      const aj = (t.feriasAjuste && t.feriasAjuste.fim===toISO(fim)) ? (Number(t.feriasAjuste.dias)||0) : 0;
+      return mk({ini, fim, fimConc, limite, gozados:gozados+aj, aj, prog});
+    }
+    if(t.feriasLimite){ // fallback: data limite manual (sem admissão cadastrada)
+      let prog = 0;
+      fer.forEach(a=>{ if(fromISO(a.fim)>=today) prog += diasDe(a); });
+      return mk({ini:null, fim:null, fimConc:null, limite:fromISO(t.feriasLimite), gozados:0, aj:0, prog, manual:true});
+    }
+    return null;
+  }
+
+  // Sugestão intercalada: ordena por prazo; evita férias dos outros e as obras do próprio técnico; só dia útil.
+  function feriasSugestoes(){
+    const today = startOfDay(new Date());
+    const pend = [];
+    TECNICOS.forEach(t=>{ const r = feriasPeriodo(t); if(r && r.limite && r.aProg>0) pend.push(r); });
+    pend.sort((x,y)=> x.limite-y.limite);
+    const ocup = feriasAllocs().filter(a=>fromISO(a.fim)>=today).map(a=>({i:fromISO(a.inicio), f:fromISO(a.fim), tec:a.tecnicoId}));
+    const res = {};
+    pend.forEach(r=>{
+      const dur = Math.min(30, r.aProg);
+      const proprias = allocations.filter(a=>a.tecnicoId===r.t.id && !isFeriasAlloc(a)).map(a=>({i:fromISO(a.inicio), f:fromISO(a.fim)}));
+      const bloq = ocup.filter(o=>o.tec!==r.t.id).concat(proprias);
+      let s = addDays(today,1); if(r.fim && s<=r.fim) s = addDays(r.fim,1);
+      let e;
+      for(let n=0;n<400;n++){
+        while(s.getDay()===0 || s.getDay()===6) s = addDays(s,1);
+        e = addDays(s,dur-1);
+        const hit = bloq.find(x=> overlaps(s,e,x.i,x.f));
+        if(!hit) break;
+        s = addDays(hit.f,1);
+      }
+      res[r.t.id] = {ini:s, fim:e, dur, semJanela: s>r.limite};
+      ocup.push({i:s, f:e, tec:r.t.id});
+    });
+    return res;
+  }
+  function feriasAlertaSpan(t){
+    const r = feriasPeriodo(t);
+    if(!r || !r.limite || r.aProg===0 || r.nivel.rank<2) return null;
+    return el('span',{class:'tech-meta', style:'color:var(--red);'}, '⚠ Férias: iniciar até '+fmtShort(r.limite));
+  }
 
   function renderFeriasManage(){
     const wrap = el('div',{class:'manage-wrap'});
-    wrap.appendChild(el('h2',{}, 'Férias'));
-    wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'}, 'Data limite de férias por técnico, períodos solicitados/agendados e quem está de férias agora. Períodos criados aqui aparecem automaticamente no Quadro como Indisponibilidade.'));
-
+    const podeAlocar = canAllocate(currentUser.papel);
     const today = startOfDay(new Date());
-    const emFerias = feriasAllocs().filter(a=> fromISO(a.inicio)<=today && today<=fromISO(a.fim));
+    wrap.appendChild(el('h2',{}, 'Férias'));
+    wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'},
+      '30 dias a cada 12 meses de trabalho. Prazo para INICIAR = fim do período concessivo − 29 dias (no máximo ~1 mês antes do mês de admissão do ano seguinte). Períodos registrados aparecem no Quadro como Indisponibilidade.'));
 
-    wrap.appendChild(el('div',{class:'section-title'}, 'De férias agora'));
-    if(emFerias.length===0){
-      wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:16px;'}, 'Ninguém de férias no momento.'));
-    } else {
-      const l = el('div',{class:'manage-list', style:'margin-bottom:16px;'});
-      emFerias.forEach(a=> l.appendChild(el('div',{class:'manage-item'},
-        el('div',{class:'info'}, el('b',{}, tecById(a.tecnicoId).nome), el('span',{}, fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim)))))));
-      wrap.appendChild(l);
+    const linhas = TECNICOS.map(t=>({t, r:feriasPeriodo(t)}));
+    const sug = feriasSugestoes();
+    const emFerias = feriasAllocs().filter(a=> fromISO(a.inicio)<=today && today<=fromISO(a.fim));
+    const nUrg = linhas.filter(x=> x.r && x.r.limite && x.r.aProg>0 && x.r.nivel.rank>=2).length;
+    const nSemAdm = linhas.filter(x=> !x.r).length;
+    wrap.appendChild(el('div',{class:'report-grid'},
+      el('div',{class:'report-card'}, el('div',{class:'num', style: nUrg? 'color:var(--red);':''}, nUrg), el('div',{class:'lbl'}, 'Vencidas / críticas')),
+      el('div',{class:'report-card'}, el('div',{class:'num'}, emFerias.length), el('div',{class:'lbl'}, 'De férias agora')),
+      el('div',{class:'report-card'}, el('div',{class:'num'}, feriasAllocs().filter(a=>fromISO(a.fim)>=today).length), el('div',{class:'lbl'}, 'Períodos programados')),
+      el('div',{class:'report-card'}, el('div',{class:'num'}, nSemAdm), el('div',{class:'lbl'}, 'Sem admissão/limite'))
+    ));
+
+    if(podeAlocar){
+      wrap.appendChild(el('div',{style:'margin-bottom:14px;'},
+        el('button',{class:'btn ghost small', onclick: async ()=>{
+          let n = 0;
+          for(const t of TECNICOS){
+            const d = FERIAS_KNOWN[normNome(t.nome)];
+            if(d && !t.admissao){
+              try{ await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({admissao:d})}); n++; }catch(e){}
+            }
+          }
+          await loadData(); render();
+          alert(n+' data(s) de admissão preenchida(s).');
+        }}, '⬇ Preencher admissões conhecidas')));
     }
 
-    wrap.appendChild(el('div',{class:'section-title'}, 'Data limite de férias por técnico'));
-    const limiteList = el('div',{class:'manage-list', style:'margin-bottom:20px;'});
-    TECNICOS.forEach(t=>{
-      if(editingFeriasLimiteId===t.id){
-        limiteList.appendChild(el('div',{class:'manage-item'},
-          el('div',{class:'info'}, el('b',{}, t.nome)),
-          el('div',{class:'manage-actions'},
-            el('input',{type:'date', value:feriasLimiteDraft, onchange:(e)=>feriasLimiteDraft=e.target.value}),
-            el('button',{class:'btn small', onclick: async ()=>{
-              try{ await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasLimite:feriasLimiteDraft})}); editingFeriasLimiteId=null; await loadData(); render(); }
-              catch(e){ alert(e.error||'Erro ao salvar.'); }
-            }}, 'Salvar'),
-            el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasLimiteId=null; render(); }}, 'Cancelar')
-          )
+    linhas.sort((x,y)=>{
+      const lx = x.r && x.r.limite, ly = y.r && y.r.limite;
+      if(lx && ly) return lx-ly; if(lx) return -1; if(ly) return 1;
+      return x.t.nome.localeCompare(y.t.nome);
+    });
+
+    wrap.appendChild(el('div',{class:'section-title'}, 'Prazo de férias por técnico'));
+    const body = el('tbody',{});
+    linhas.forEach(({t,r})=>{
+      const admInput = el('input',{type:'date', value:t.admissao||'', disabled:!podeAlocar, style:'padding:4px 6px; width:132px;', onchange: async (e)=>{
+        try{ await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({admissao:e.target.value})}); await loadData(); render(); }
+        catch(err){ alert(err.error||'Erro ao salvar.'); }
+      }});
+      if(!r || r.emAquisicao){
+        body.appendChild(el('tr',{},
+          el('td',{}, el('b',{}, t.nome)), el('td',{}, admInput),
+          el('td',{}, r ? (fmtShort(r.emAquisicao.ini)+' a '+fmtShort(r.emAquisicao.fim)) : '—'),
+          el('td',{colspan:'6', class:'sub'}, r ? ('Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1))) : 'Informe a data de admissão')
         ));
         return;
       }
-      const limite = t.feriasLimite;
-      let alerta = null;
-      if(limite){
-        const dias = diffDays(fromISO(limite), today);
-        if(dias<0) alerta = el('span',{class:'status-badge status-indisp'}, 'Venceu');
-        else if(dias<=60) alerta = el('span',{class:'status-badge status-campo'}, dias+'d restantes');
+      const s = sug[t.id];
+      const ajInput = (!r.manual && podeAlocar) ? el('input',{type:'number', min:'0', max:'30', value:String(r.aj||0), title:'Dias já gozados fora do sistema (fracionamento/abono)',
+        style:'width:54px; padding:4px 6px; margin-left:6px;', onchange: async (e)=>{
+          try{ await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasAjuste:{fim:toISO(r.fim), dias:e.target.value}})}); await loadData(); render(); }
+          catch(err){ alert(err.error||'Erro ao salvar.'); }
+        }}) : null;
+      const badge = el('span',{class:'status-badge '+r.nivel.cls, style: r.nivel.amber ? 'background:var(--amber-dim); color:var(--amber);' : ''}, r.nivel.label);
+      let sugCell = el('span',{class:'sub'}, '—');
+      if(s){
+        sugCell = el('div',{},
+          el('div',{}, fmtShort(s.ini)+' a '+fmtShort(s.fim)+' ('+s.dur+'d)'),
+          s.semJanela ? el('div',{style:'color:var(--red); font-size:11px;'}, '⚠ passa do prazo') : null,
+          podeAlocar ? el('button',{class:'btn small', style:'margin-top:4px;', onclick:()=>{
+            novoFerias = {tecnicoId:t.id, statusFerias:'Agendado', inicio:toISO(s.ini), fim:toISO(s.fim), notas:''};
+            render();
+          }}, 'Usar sugestão') : null);
       }
-      limiteList.appendChild(el('div',{class:'manage-item'},
-        el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, limite ? ('Limite: '+fmtLong(fromISO(limite))) : 'Sem data limite definida')),
-        el('div',{class:'manage-actions'},
-          alerta,
-          el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasLimiteId=t.id; feriasLimiteDraft=t.feriasLimite||''; render(); }}, 'Editar')
-        )
+      body.appendChild(el('tr',{},
+        el('td',{}, el('b',{}, t.nome)), el('td',{}, admInput),
+        el('td',{}, r.ini ? (fmtShort(r.ini)+' a '+fmtShort(r.fim)) : '—'),
+        el('td',{}, el('b',{}, fmtLong(r.limite)), r.manual ? el('div',{class:'sub'}, '(data manual)') : null),
+        el('td',{}, String(r.gozados), ajInput),
+        el('td',{}, String(r.prog)),
+        el('td',{}, el('b',{}, String(r.aProg))),
+        el('td',{}, badge),
+        el('td',{}, sugCell)
       ));
     });
-    wrap.appendChild(limiteList);
+    wrap.appendChild(el('div',{class:'table-wrap'}, el('table',{class:'report-table'},
+      el('thead',{}, el('tr',{}, ['Técnico','Admissão','Aquisitivo','Iniciar até','Gozados','Programados','A programar','Situação','Sugestão intercalada'].map(h=>el('th',{},h)))),
+      body)));
 
-    let novo = {tecnicoId: TECNICOS[0]&&TECNICOS[0].id, statusFerias:'Solicitado', inicio:toISO(new Date()), fim:toISO(new Date()), notas:''};
+    // registrar período
+    if(!novoFerias) novoFerias = {tecnicoId: TECNICOS[0]&&TECNICOS[0].id, statusFerias:'Solicitado', inicio:toISO(new Date()), fim:toISO(new Date()), notas:''};
+    const novo = novoFerias;
     wrap.appendChild(el('div',{class:'section-title'}, 'Registrar período de férias'));
     wrap.appendChild(el('div',{class:'manage-form'},
       TECNICOS.length ? el('div',{class:'field'}, el('label',{},'Técnico'), selectEl(novo.tecnicoId, TECNICOS, v=>novo.tecnicoId=v, t=>t.nome)) : el('div',{class:'sub'},'Cadastre um técnico primeiro.'),
       el('div',{class:'field'}, el('label',{},'Status'), selectEl(novo.statusFerias, STATUS_FERIAS, v=>novo.statusFerias=v)),
       el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:novo.inicio, onchange:(e)=>novo.inicio=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:novo.fim, onchange:(e)=>novo.fim=e.target.value})),
-      el('div',{class:'field'}, el('label',{},'Notas (opcional)'), el('input',{type:'text', oninput:(e)=>novo.notas=e.target.value})),
+      el('div',{class:'field'}, el('label',{},'Notas (opcional)'), el('input',{type:'text', value:novo.notas, oninput:(e)=>novo.notas=e.target.value})),
       el('button',{class:'btn', onclick: async ()=>{
-        if(!novo.tecnicoId || !novo.inicio || !novo.fim || novo.fim<novo.inicio) return;
+        if(!novo.tecnicoId || !novo.inicio || !novo.fim || novo.fim<novo.inicio){ alert('Confira as datas.'); return; }
+        const coincide = feriasAllocs().filter(o=> o.tecnicoId!==novo.tecnicoId && overlaps(fromISO(novo.inicio),fromISO(novo.fim),fromISO(o.inicio),fromISO(o.fim)));
+        if(coincide.length && !confirm('Coincide com as férias de: '+coincide.map(o=>tecById(o.tecnicoId).nome).join(', ')+'. Registrar mesmo assim?')) return;
+        const r = feriasPeriodo(tecById(novo.tecnicoId));
+        if(r && r.limite && fromISO(novo.inicio)>r.limite && !confirm('O início é depois do prazo limite ('+fmtLong(r.limite)+'). Registrar mesmo assim?')) return;
         try{
           await api('/api/allocations', {method:'POST', body:JSON.stringify({tecnicoId:novo.tecnicoId, tipo:'Indisponibilidade', obra:'Férias', local:'—', inicio:novo.inicio, fim:novo.fim, notas:novo.notas, ferias:true, statusFerias:novo.statusFerias})});
-          await loadData(); render();
+          novoFerias = null; await loadData(); render();
         }catch(e){ alert(e.error||'Erro ao registrar.'); }
       }}, '+ Registrar período')
     ));
 
+    // períodos registrados, com verificação de intercalação
     wrap.appendChild(el('div',{class:'section-title'}, 'Períodos registrados'));
     const list = el('div',{class:'manage-list'});
-    feriasAllocs().slice().sort((a,b)=> fromISO(b.inicio)-fromISO(a.inicio)).forEach(a=>{
+    const todas = feriasAllocs();
+    todas.slice().sort((x,y)=> fromISO(y.inicio)-fromISO(x.inicio)).forEach(a=>{
       if(editingFeriasId===a.id){
         const d = editFeriasDraft;
         list.appendChild(el('div',{class:'manage-form'},
@@ -1093,9 +1218,17 @@
         ));
         return;
       }
+      const alertas = [];
+      if(fromISO(a.fim)>=today){
+        const outros = todas.filter(o=> o.id!==a.id && o.tecnicoId!==a.tecnicoId && overlaps(fromISO(a.inicio),fromISO(a.fim),fromISO(o.inicio),fromISO(o.fim)));
+        if(outros.length) alertas.push('⚠ Coincide com '+outros.map(o=>tecById(o.tecnicoId).nome.split(' ')[0]).join(', '));
+        const r = feriasPeriodo(tecById(a.tecnicoId));
+        if(r && r.limite && fromISO(a.inicio)>r.limite) alertas.push('⚠ Início após o prazo limite');
+      }
       list.appendChild(el('div',{class:'manage-item'},
         el('div',{class:'info'}, el('b',{}, tecById(a.tecnicoId).nome),
-          el('span',{}, (a.statusFerias||'—')+' · '+fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim)))),
+          el('span',{}, (a.statusFerias||'—')+' · '+fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim))+' · '+diasDe(a)+' dias'),
+          alertas.length ? el('span',{style:'color:var(--red);'}, alertas.join(' · ')) : null),
         el('div',{class:'manage-actions'},
           el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado'}; render(); }}, 'Editar'),
           el('button',{class:'btn danger small', onclick: async ()=>{
@@ -1105,7 +1238,7 @@
         )
       ));
     });
-    if(feriasAllocs().length===0) list.appendChild(el('div',{class:'empty'}, 'Nenhum período registrado.'));
+    if(todas.length===0) list.appendChild(el('div',{class:'empty'}, 'Nenhum período registrado.'));
     wrap.appendChild(list);
     return wrap;
   }
