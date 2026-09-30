@@ -1276,8 +1276,9 @@
     // registrar período
     if(!novoFerias) novoFerias = {tecnicoId: TECNICOS[0]&&TECNICOS[0].id, statusFerias:'Solicitado', inicio:toISO(new Date()), fim:toISO(new Date()), notas:''};
     const novo = novoFerias;
-    wrap.appendChild(el('div',{class:'section-title'}, 'Registrar período de férias'));
-    wrap.appendChild(el('div',{class:'manage-form'},
+    const det = el('details',{style:'margin:12px 0;'}, el('summary',{style:'cursor:pointer; color:var(--muted,#9aa);'}, 'Registro direto de período (já programado, sem passar por "Datas solicitadas")'));
+    wrap.appendChild(det);
+    det.appendChild(el('div',{class:'manage-form'},
       TECNICOS.length ? el('div',{class:'field'}, el('label',{},'Técnico'), selectEl(novo.tecnicoId, TECNICOS, v=>novo.tecnicoId=v, t=>t.nome)) : el('div',{class:'sub'},'Cadastre um técnico primeiro.'),
       el('div',{class:'field'}, el('label',{},'Status'), selectEl(novo.statusFerias, STATUS_FERIAS, v=>novo.statusFerias=v)),
       el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:novo.inicio, onchange:(e)=>novo.inicio=e.target.value})),
