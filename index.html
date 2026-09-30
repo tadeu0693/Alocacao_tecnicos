@@ -122,6 +122,7 @@
   .bar.emergencia{outline:2px solid #ff2d55; outline-offset:-2px;}
   .bar.conflito{outline:2px solid #fff; outline-offset:-2px;
     background-image:repeating-linear-gradient(135deg, rgba(0,0,0,.18) 0 6px, transparent 6px 12px);}
+  .bar.solicitada{background:repeating-linear-gradient(135deg, rgba(239,91,82,.35) 0 6px, rgba(239,91,82,.15) 6px 12px); border:1px dashed var(--red); color:#ffb4ae; box-shadow:none; opacity:1;}
   .bar .conflict-flag{margin-left:auto; font-size:11px;}
 
   .empty{padding:50px 20px; text-align:center; color:var(--text-dim);}
@@ -900,7 +901,7 @@
     wrap.appendChild(header);
     const rowsWrap = el('div',{class:'rows', style:`width:${nameColWidth+totalWidth}px`});
     filteredTechs().forEach(t=>{
-      const list = techAllocs(t.id).filter(a=> overlaps(fromISO(a.inicio),fromISO(a.fim), windowStart, addDays(windowStart,DAYS_IN_VIEW-1)));
+      const list = techAllocs(t.id).concat(feriasSolicitadasAllocs(t)).filter(a=> overlaps(fromISO(a.inicio),fromISO(a.fim), windowStart, addDays(windowStart,DAYS_IN_VIEW-1)));
       const {items, laneCount} = assignLanes(list);
       const rowHeight = Math.max(36, laneCount*30+6);
       const track = el('div',{class:'track', style:`height:${rowHeight}px`});
@@ -920,10 +921,10 @@
           const startIdx = diffDays(segS,windowStart), endIdx = diffDays(segE,windowStart);
           const left = startIdx*dayWidth, width = (endIdx-startIdx+1)*dayWidth - 4;
           const lbl = barLabel(a, width);
-          lanes.appendChild(el('div',{class:'bar tipo-'+a.tipo+(isConflict?' conflito':'')+(a.emergencial?' emergencia':''),
+          lanes.appendChild(el('div',{class:'bar tipo-'+a.tipo+(isConflict?' conflito':'')+(a.emergencial?' emergencia':'')+(a.solicitada?' solicitada':''),
             style:`left:${left+2}px; width:${width}px; top:${a.lane*30+4}px;`,
-            title:lbl.full+(a.emergencial?' (emergência)':''),
-            onclick:(ev)=>{ ev.stopPropagation(); modal={mode:'detail', data:a}; render(); }
+            title:lbl.full+(a.emergencial?' (emergência)':'')+(a.solicitada?' — solicitada, ainda não programada (clique para ir em Férias)':(a.ferias&&a.statusFerias?' ['+a.statusFerias+']':'')),
+            onclick:(ev)=>{ ev.stopPropagation(); if(a.solicitada){ activeTab='ferias'; render(); return; } modal={mode:'detail', data:a}; render(); }
           }, lbl.short, isConflict?el('span',{class:'conflict-flag'},'⚠'):null));
         });
       });
@@ -938,7 +939,7 @@
     const item = (color,label)=> el('div',{class:'legend-item'}, el('span',{class:'legend-sw', style:`background:${color}`}), label);
     return el('div',{class:'legend'},
       item('var(--blue)','Implantação'), item('var(--teal)','Manutenção'),
-      item('var(--red)','Indisponibilidade'), item('var(--amber)','Outro'), item('#fff','⚠ Conflito de agenda'),
+      item('var(--red)','Indisponibilidade'), item('var(--amber)','Outro'), item('#fff','⚠ Conflito de agenda'), item('rgba(239,91,82,.45)','Férias solicitada (tracejado)'),
       el('div',{class:'legend-item'}, el('span',{class:'legend-sw', style:'background:transparent; border:2px solid #ff2d55;'}), '🚨 Emergência'));
   }
 
@@ -1087,6 +1088,10 @@
     });
     return res;
   }
+  function feriasSolicitadasAllocs(t){
+    const today = startOfDay(new Date());
+    return (t.feriasPref||[]).filter(p=> fromISO(p.fim)>=today).map(p=>({id:'pref-'+p.id, tecnicoId:t.id, tipo:'Indisponibilidade', obra:'Férias solicitada', local:'', inicio:p.inicio, fim:p.fim, notas:p.notas||'', solicitada:true}));
+  }
   function feriasAlertaSpan(t){
     const r = feriasPeriodo(t);
     if(!r || !r.limite || r.aProg===0 || r.nivel.rank<2) return null;
@@ -1208,7 +1213,7 @@
         body.appendChild(el('tr',{},
           el('td',{}, el('b',{}, t.nome)), el('td',{}, admInput),
           el('td',{}, r ? (fmtShort(r.emAquisicao.ini)+' a '+fmtShort(r.emAquisicao.fim)) : '—'),
-          el('td',{colspan:'7', class:'sub'}, r ? ('Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1))) : 'Informe a data de admissão')
+          el('td',{colspan:'8', class:'sub'}, r ? ('Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1))) : 'Informe a data de admissão')
         ));
         return;
       }
@@ -1234,16 +1239,19 @@
         el('td',{}, el('b',{}, t.nome)), el('td',{}, admInput),
         el('td',{}, r.ini ? (fmtShort(r.ini)+' a '+fmtShort(r.fim)) : '—'),
         el('td',{}, el('b',{}, fmtLong(r.limite)), r.manual ? el('div',{class:'sub'}, '(data manual)') : null),
+        el('td',{}, el('b',{}, '30 d')),
         el('td',{}, el('div',{}, r.gozados+' d'), ajInput ? el('div',{class:'sub', style:'font-size:10.5px;'}, 'tirados fora do sistema: ', ajInput) : null),
         el('td',{}, el('div',{}, r.prog+' d'), r.solic>0 ? el('div',{class:'sub', style:'font-size:10.5px; color:var(--amber);'}, '+ '+r.solic+' d solicitados') : null),
-        el('td',{}, el('b',{}, String(Math.max(0, r.aProg-r.solic))), r.solic>0 ? el('div',{class:'sub', style:'font-size:10.5px;'}, 'de '+r.aProg+' d') : null),
+        el('td',{}, el('b',{}, Math.max(0, r.aProg-r.solic)+' d'),
+          el('div',{class:'sub', style:'font-size:10.5px;'}, '30 − '+r.gozados+' − '+r.prog+(r.solic>0?(' − '+r.solic):'')),
+          (r.solic>r.aProg) ? el('div',{style:'color:var(--red); font-size:10.5px;'}, '⚠ solicitado excede o saldo em '+(r.solic-r.aProg)+' d') : null),
         el('td',{}, badge),
         el('td',{}, prefCell(t, podeAlocar)),
         el('td',{}, sugCell)
       ));
     });
     wrap.appendChild(el('div',{class:'table-wrap'}, el('table',{class:'report-table'},
-      el('thead',{}, el('tr',{}, ['Técnico','Admissão','Aquisitivo','Iniciar até','Dias tirados','Programados','A programar','Situação','Datas solicitadas','Sugestão intercalada'].map(h=>el('th',{},h)))),
+      el('thead',{}, el('tr',{}, ['Técnico','Admissão','Aquisitivo','Iniciar até','Direito','Dias tirados','Programados','A programar','Situação','Datas solicitadas','Sugestão intercalada'].map(h=>el('th',{},h)))),
       body)));
 
     // registrar período
