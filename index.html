@@ -122,6 +122,8 @@
   .bar.emergencia{outline:2px solid #ff2d55; outline-offset:-2px;}
   .bar.conflito{outline:2px solid #fff; outline-offset:-2px;
     background-image:repeating-linear-gradient(135deg, rgba(0,0,0,.18) 0 6px, transparent 6px 12px);}
+  .bar.ferias-pend{opacity:.6; border:1px dashed #fff8;}
+  .bar.ferias-ok{box-shadow:0 0 0 2px #3ddc97 inset; font-weight:700;}
   .bar.solicitada{background:repeating-linear-gradient(135deg, rgba(239,91,82,.35) 0 6px, rgba(239,91,82,.15) 6px 12px); border:1px dashed var(--red); color:#ffb4ae; box-shadow:none; opacity:1;}
   .bar .conflict-flag{margin-left:auto; font-size:11px;}
 
@@ -921,11 +923,11 @@
           const startIdx = diffDays(segS,windowStart), endIdx = diffDays(segE,windowStart);
           const left = startIdx*dayWidth, width = (endIdx-startIdx+1)*dayWidth - 4;
           const lbl = barLabel(a, width);
-          lanes.appendChild(el('div',{class:'bar tipo-'+a.tipo+(isConflict?' conflito':'')+(a.emergencial?' emergencia':'')+(a.solicitada?' solicitada':''),
+          lanes.appendChild(el('div',{class:'bar tipo-'+a.tipo+(isConflict?' conflito':'')+(a.emergencial?' emergencia':'')+(a.solicitada?' solicitada':'')+(a.ferias&&!a.solicitada?(a.statusFerias==='Aprovado'?' ferias-ok':' ferias-pend'):''),
             style:`left:${left+2}px; width:${width}px; top:${a.lane*30+4}px;`,
             title:lbl.full+(a.emergencial?' (emergência)':'')+(a.solicitada?' — solicitada, ainda não programada (clique para ir em Férias)':(a.ferias&&a.statusFerias?' ['+a.statusFerias+']':'')),
             onclick:(ev)=>{ ev.stopPropagation(); if(a.solicitada){ activeTab='ferias'; render(); return; } modal={mode:'detail', data:a}; render(); }
-          }, lbl.short, isConflict?el('span',{class:'conflict-flag'},'⚠'):null));
+          }, (a.ferias&&a.statusFerias==='Aprovado'?'✓ ':'')+lbl.short, isConflict?el('span',{class:'conflict-flag'},'⚠'):null));
         });
       });
       daysArea.appendChild(lanes); track.appendChild(daysArea); rowsWrap.appendChild(track);
@@ -939,7 +941,7 @@
     const item = (color,label)=> el('div',{class:'legend-item'}, el('span',{class:'legend-sw', style:`background:${color}`}), label);
     return el('div',{class:'legend'},
       item('var(--blue)','Implantação'), item('var(--teal)','Manutenção'),
-      item('var(--red)','Indisponibilidade'), item('var(--amber)','Outro'), item('#fff','⚠ Conflito de agenda'), item('rgba(239,91,82,.45)','Férias solicitada (tracejado)'),
+      item('var(--red)','Indisponibilidade'), item('var(--amber)','Outro'), item('#fff','⚠ Conflito de agenda'), item('rgba(239,91,82,.45)','Férias solicitada (tracejado)'), item('#3ddc97','✓ Férias aprovada (fixa)'),
       el('div',{class:'legend-item'}, el('span',{class:'legend-sw', style:'background:transparent; border:2px solid #ff2d55;'}), '🚨 Emergência'));
   }
 
@@ -1008,7 +1010,7 @@
     "CARLOS AUGUSTO GOMES DOS SANTOS":"2024-06-17","BRENO HAYAN LEITE GONCALVES":"2022-08-08","FRANCISCO PAULO MARTINS SILVA":"2022-11-14",
     "JOSE RENATO RODRIGUES SILVA":"2022-11-28","VAGNER LIMA DA COSTA":"2018-10-16","JOSE ROBERTO DE MORAIS JUNIOR":"2025-06-16"
   };
-  const STATUS_FERIAS = ['Solicitado','Agendado','Confirmado'];
+  const STATUS_FERIAS = ['Solicitado','Agendado','Confirmado','Aprovado'];
   let editingFeriasId = null, editFeriasDraft = null, novoFerias = null;
 
   function normNome(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim(); }
@@ -1315,8 +1317,13 @@
           el('span',{}, (a.statusFerias||'—')+' · '+fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim))+' · '+diasDe(a)+' dias'),
           alertas.length ? el('span',{style:'color:var(--red);'}, alertas.join(' · ')) : null),
         el('div',{class:'manage-actions'},
+          el('button',{class:'btn small', onclick: async ()=>{
+            try{ await api('/api/allocations?id='+a.id, {method:'PATCH', body:JSON.stringify({action:'edit_ferias', statusFerias: a.statusFerias==='Aprovado'?'Agendado':'Aprovado'})}); await loadData(); render(); }
+            catch(e){ alert(e.error||'Erro.'); }
+          }}, a.statusFerias==='Aprovado'?'Desaprovar':'✓ Aprovar'),
           el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado'}; render(); }}, 'Editar'),
           el('button',{class:'btn danger small', onclick: async ()=>{
+            if(a.statusFerias==='Aprovado' && !confirm('Férias aprovada e fixa no quadro. Excluir mesmo assim?')) return;
             try{ await api('/api/allocations?id='+a.id, {method:'DELETE'}); await loadData(); render(); }
             catch(e){ alert(e.error||'Erro ao excluir.'); }
           }}, 'Excluir')
