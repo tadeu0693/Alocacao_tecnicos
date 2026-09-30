@@ -10,6 +10,10 @@ function cleanAjuste(v) {
   return { fim: v.fim, dias };
 }
 
+function cleanFora(v) {
+  return Array.isArray(v) ? v.map(String).slice(0, 100) : [];
+}
+
 function cleanPref(v) {
   if (!Array.isArray(v)) return [];
   return v.filter(p => p && ISO.test(String(p.inicio || '')) && ISO.test(String(p.fim || '')) && p.fim >= p.inicio)
@@ -52,7 +56,7 @@ export default async function handler(req, res) {
       const tecnicos = await getJSON('tecnicos', []);
       const idx = tecnicos.findIndex(t => t.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Técnico não encontrado.' });
-      const { nome, cargo, local, tipo, feriasLimite, admissao, feriasAjuste, feriasPref } = req.body || {};
+      const { nome, cargo, local, tipo, feriasLimite, admissao, feriasAjuste, feriasPref, feriasFora } = req.body || {};
       if (nome !== undefined) tecnicos[idx].nome = String(nome).trim().toUpperCase();
       if (cargo !== undefined) tecnicos[idx].cargo = cargo;
       if (local !== undefined) tecnicos[idx].local = local;
@@ -61,6 +65,7 @@ export default async function handler(req, res) {
       if (admissao !== undefined) tecnicos[idx].admissao = cleanAdmissao(admissao);
       if (feriasAjuste !== undefined) tecnicos[idx].feriasAjuste = cleanAjuste(feriasAjuste);
       if (feriasPref !== undefined) tecnicos[idx].feriasPref = cleanPref(feriasPref);
+      if (feriasFora !== undefined) tecnicos[idx].feriasFora = cleanFora(feriasFora);
       await setJSON('tecnicos', tecnicos);
       return res.status(200).json({ tecnico: tecnicos[idx] });
     }
