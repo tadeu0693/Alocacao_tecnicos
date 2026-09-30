@@ -1044,7 +1044,7 @@
       const fim = addDays(addYearsDate(t.admissao,k),-1);
       const fimConc = addYearsDate(toISO(fim),1);
       const limite = addDays(fimConc,-29);
-      let gozados = 0, prog = 0;
+      let gozados = 0, prog = 0, vend = 0;
       const fora = new Set(t.feriasFora||[]);
       const itens = [];
       fer.forEach(a=>{
@@ -1052,12 +1052,12 @@
         if(s>fim && s<=fimConc){
           const conta = !fora.has(a.id);
           itens.push({a, conta});
-          if(conta){ if(fromISO(a.fim)<today) gozados += diasDe(a); else prog += diasDe(a); }
+          if(conta){ vend += (a.diasVendidos||0); gozados += (a.diasVendidos||0); if(fromISO(a.fim)<today) gozados += diasDe(a); else prog += diasDe(a); }
         }
       });
       itens.sort((x,y)=> x.a.inicio<y.a.inicio?-1:1);
       const aj = (t.feriasAjuste && t.feriasAjuste.fim===toISO(fim)) ? (Number(t.feriasAjuste.dias)||0) : 0;
-      return mk({ini, fim, fimConc, limite, gozados:gozados+aj, aj, prog, itens});
+      return mk({ini, fim, fimConc, limite, gozados:gozados+aj, aj, prog, itens, vend});
     }
     if(t.feriasLimite){ // fallback: data limite manual (sem admissão cadastrada)
       let prog = 0;
@@ -1121,7 +1121,7 @@
     const r = feriasPeriodo(tecById(novo.tecnicoId));
     if(r && r.limite && fromISO(novo.inicio)>r.limite && !confirm('O início é depois do prazo limite ('+fmtLong(r.limite)+'). Registrar mesmo assim?')) return;
     try{
-      await api('/api/allocations', {method:'POST', body:JSON.stringify({tecnicoId:novo.tecnicoId, tipo:'Indisponibilidade', obra:'Férias', local:'—', inicio:novo.inicio, fim:novo.fim, notas:novo.notas||'', ferias:true, statusFerias:novo.statusFerias})});
+      await api('/api/allocations', {method:'POST', body:JSON.stringify({tecnicoId:novo.tecnicoId, tipo:'Indisponibilidade', obra:'Férias', local:'—', inicio:novo.inicio, fim:novo.fim, notas:novo.notas||'', ferias:true, statusFerias:novo.statusFerias, diasVendidos:novo.diasVendidos||0})});
       if(novo.prefId){
         const t = tecById(novo.tecnicoId);
         await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasPref:(t.feriasPref||[]).filter(p=>p.id!==novo.prefId)})});
@@ -1256,10 +1256,10 @@
         el('td',{}, r.ini ? el('div',{}, fmtLong(r.ini)+' a '+fmtLong(r.fim)) : '—', r.ini ? el('div',{class:'sub', style:'font-size:10.5px; color:var(--teal);'}, 'novo direito de 30 d desde '+fmtLong(addDays(r.fim,1))) : null),
         el('td',{}, el('b',{}, fmtLong(r.limite)), r.manual ? el('div',{class:'sub'}, '(data manual)') : null),
         el('td',{}, el('b',{}, '30 d')),
-        el('td',{}, el('div',{}, r.gozados+' d'), ajInput ? el('div',{class:'sub', style:'font-size:10.5px;'}, 'tirados fora do sistema: ', ajInput) : null),
+        el('td',{}, el('div',{}, r.gozados+' d'), r.vend>0 ? el('div',{class:'sub', style:'font-size:10.5px; color:var(--teal);'}, 'inclui '+r.vend+' d vendidos') : null, ajInput ? el('div',{class:'sub', style:'font-size:10.5px;'}, 'tirados fora do sistema: ', ajInput) : null),
         el('td',{}, el('div',{}, r.prog+' d'), r.solic>0 ? el('div',{class:'sub', style:'font-size:10.5px; color:var(--amber);'}, '+ '+r.solic+' d solicitados') : null,
           (r.itens||[]).map(it=> el('div',{style:'font-size:10.5px; margin-top:3px; color:'+(it.conta?'var(--text-dim)':'var(--text-faint)')+';'},
-            fmtShort(fromISO(it.a.inicio))+'–'+fmtShort(fromISO(it.a.fim))+' ('+diasDe(it.a)+'d)'+(it.conta?'':' · não desconta'),
+            fmtShort(fromISO(it.a.inicio))+'–'+fmtShort(fromISO(it.a.fim))+' ('+diasDe(it.a)+'d'+(it.a.diasVendidos?' + '+it.a.diasVendidos+' vendidos':'')+')'+(it.conta?'':' · não desconta'),
             podeAlocar ? el('button',{class:'btn ghost small', style:'padding:0 5px; margin-left:4px; font-size:10px;', title: it.conta ? 'Este período é de outro direito: não descontar do saldo atual' : 'Voltar a descontar do saldo atual', onclick:()=>toggleFora(t, it.a.id)}, it.conta?'não descontar':'descontar') : null))),
         el('td',{}, el('b',{}, Math.max(0, r.aProg-r.solic)+' d'),
           el('div',{class:'sub', style:'font-size:10.5px;'}, '30 − '+r.gozados+' − '+r.prog+(r.solic>0?(' − '+r.solic):'')),
@@ -1283,6 +1283,7 @@
       el('div',{class:'field'}, el('label',{},'Status'), selectEl(novo.statusFerias, STATUS_FERIAS, v=>novo.statusFerias=v)),
       el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:novo.inicio, onchange:(e)=>novo.inicio=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:novo.fim, onchange:(e)=>novo.fim=e.target.value})),
+      el('div',{class:'field'}, el('label',{},'Dias vendidos (0–10)'), el('input',{type:'number', min:'0', max:'10', value:String(novo.diasVendidos||0), onchange:(e)=>novo.diasVendidos=Math.max(0,Math.min(10,parseInt(e.target.value,10)||0))})),
       el('div',{class:'field'}, el('label',{},'Notas (opcional)'), el('input',{type:'text', value:novo.notas, oninput:(e)=>novo.notas=e.target.value})),
       el('button',{class:'btn', onclick:()=>registrarFerias(novo)}, '+ Registrar período')
     ));
@@ -1298,8 +1299,9 @@
           el('div',{class:'field'}, el('label',{},'Status'), selectEl(d.statusFerias, STATUS_FERIAS, v=>d.statusFerias=v)),
           el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:d.inicio, onchange:(e)=>d.inicio=e.target.value})),
           el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:d.fim, onchange:(e)=>d.fim=e.target.value})),
+          el('div',{class:'field'}, el('label',{},'Dias vendidos (0–10)'), el('input',{type:'number', min:'0', max:'10', value:String(d.diasVendidos||0), onchange:(e)=>d.diasVendidos=Math.max(0,Math.min(10,parseInt(e.target.value,10)||0))})),
           el('button',{class:'btn', onclick: async ()=>{
-            try{ await api('/api/allocations?id='+a.id, {method:'PATCH', body:JSON.stringify({action:'edit_ferias', inicio:d.inicio, fim:d.fim, statusFerias:d.statusFerias})}); editingFeriasId=null; await loadData(); render(); }
+            try{ await api('/api/allocations?id='+a.id, {method:'PATCH', body:JSON.stringify({action:'edit_ferias', inicio:d.inicio, fim:d.fim, statusFerias:d.statusFerias, diasVendidos:d.diasVendidos||0})}); editingFeriasId=null; await loadData(); render(); }
             catch(e){ alert(e.error||'Erro ao salvar.'); }
           }}, 'Salvar'),
           el('button',{class:'btn ghost', onclick:()=>{ editingFeriasId=null; render(); }}, 'Cancelar')
@@ -1315,14 +1317,14 @@
       }
       list.appendChild(el('div',{class:'manage-item'},
         el('div',{class:'info'}, el('b',{}, tecById(a.tecnicoId).nome),
-          el('span',{}, (a.statusFerias||'—')+' · '+fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim))+' · '+diasDe(a)+' dias'),
+          el('span',{}, (a.statusFerias||'—')+' · '+fmtShort(fromISO(a.inicio))+' a '+fmtShort(fromISO(a.fim))+' · '+diasDe(a)+' dias'+(a.diasVendidos?(' + '+a.diasVendidos+' vendidos'):'')),
           alertas.length ? el('span',{style:'color:var(--red);'}, alertas.join(' · ')) : null),
         el('div',{class:'manage-actions'},
           el('button',{class:'btn small', onclick: async ()=>{
             try{ await api('/api/allocations?id='+a.id, {method:'PATCH', body:JSON.stringify({action:'edit_ferias', statusFerias: a.statusFerias==='Aprovado'?'Agendado':'Aprovado'})}); await loadData(); render(); }
             catch(e){ alert(e.error||'Erro.'); }
           }}, a.statusFerias==='Aprovado'?'Desaprovar':'✓ Aprovar'),
-          el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado'}; render(); }}, 'Editar'),
+          el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado', diasVendidos:a.diasVendidos||0}; render(); }}, 'Editar'),
           el('button',{class:'btn danger small', onclick: async ()=>{
             if(a.statusFerias==='Aprovado' && !confirm('Férias aprovada e fixa no quadro. Excluir mesmo assim?')) return;
             try{ await api('/api/allocations?id='+a.id, {method:'DELETE'}); await loadData(); render(); }
