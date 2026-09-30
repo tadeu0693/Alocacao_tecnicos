@@ -10,6 +10,13 @@ function cleanAjuste(v) {
   return { fim: v.fim, dias };
 }
 
+function cleanPref(v) {
+  if (!Array.isArray(v)) return [];
+  return v.filter(p => p && ISO.test(String(p.inicio || '')) && ISO.test(String(p.fim || '')) && p.fim >= p.inicio)
+    .slice(0, 10)
+    .map(p => ({ id: String(p.id || Math.random().toString(36).slice(2)), inicio: p.inicio, fim: p.fim, notas: String(p.notas || '').slice(0, 200) }));
+}
+
 export default async function handler(req, res) {
   try {
     const user = await getUserFromReq(req);
@@ -45,7 +52,7 @@ export default async function handler(req, res) {
       const tecnicos = await getJSON('tecnicos', []);
       const idx = tecnicos.findIndex(t => t.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Técnico não encontrado.' });
-      const { nome, cargo, local, tipo, feriasLimite, admissao, feriasAjuste } = req.body || {};
+      const { nome, cargo, local, tipo, feriasLimite, admissao, feriasAjuste, feriasPref } = req.body || {};
       if (nome !== undefined) tecnicos[idx].nome = String(nome).trim().toUpperCase();
       if (cargo !== undefined) tecnicos[idx].cargo = cargo;
       if (local !== undefined) tecnicos[idx].local = local;
@@ -53,6 +60,7 @@ export default async function handler(req, res) {
       if (feriasLimite !== undefined) tecnicos[idx].feriasLimite = feriasLimite;
       if (admissao !== undefined) tecnicos[idx].admissao = cleanAdmissao(admissao);
       if (feriasAjuste !== undefined) tecnicos[idx].feriasAjuste = cleanAjuste(feriasAjuste);
+      if (feriasPref !== undefined) tecnicos[idx].feriasPref = cleanPref(feriasPref);
       await setJSON('tecnicos', tecnicos);
       return res.status(200).json({ tecnico: tecnicos[idx] });
     }

@@ -1065,19 +1065,23 @@
     const ocup = feriasAllocs().filter(a=>fromISO(a.fim)>=today).map(a=>({i:fromISO(a.inicio), f:fromISO(a.fim), tec:a.tecnicoId}));
     const res = {};
     pend.forEach(r=>{
-      const dur = Math.min(30, r.aProg);
+      const prefs = (r.t.feriasPref||[]).filter(p=>fromISO(p.fim)>=today).sort((x,y)=> x.inicio<y.inicio?-1:1);
+      const pref0 = prefs[0] || null;
+      const dur = pref0 ? Math.min(r.aProg, diffDays(fromISO(pref0.fim), fromISO(pref0.inicio))+1) : Math.min(30, r.aProg);
       const proprias = allocations.filter(a=>a.tecnicoId===r.t.id && !isFeriasAlloc(a)).map(a=>({i:fromISO(a.inicio), f:fromISO(a.fim)}));
       const bloq = ocup.filter(o=>o.tec!==r.t.id).concat(proprias);
       let s = addDays(today,1); if(r.fim && s<=r.fim) s = addDays(r.fim,1);
+      if(pref0){ const ps = fromISO(pref0.inicio); if(ps>s) s = ps; }
+      const startWanted = new Date(s);
       let e;
       for(let n=0;n<400;n++){
-        while(s.getDay()===0 || s.getDay()===6) s = addDays(s,1);
+        while((!pref0 || +s!==+startWanted) && (s.getDay()===0 || s.getDay()===6)) s = addDays(s,1);
         e = addDays(s,dur-1);
         const hit = bloq.find(x=> overlaps(s,e,x.i,x.f));
         if(!hit) break;
         s = addDays(hit.f,1);
       }
-      res[r.t.id] = {ini:s, fim:e, dur, semJanela: s>r.limite};
+      res[r.t.id] = {ini:s, fim:e, dur, semJanela: s>r.limite, pref: !!pref0, atendePref: !!pref0 && +s===+startWanted};
       ocup.push({i:s, f:e, tec:r.t.id});
     });
     return res;
@@ -1086,6 +1090,34 @@
     const r = feriasPeriodo(t);
     if(!r || !r.limite || r.aProg===0 || r.nivel.rank<2) return null;
     return el('span',{class:'tech-meta', style:'color:var(--red);'}, '⚠ Férias: iniciar até '+fmtShort(r.limite));
+  }
+
+  let prefDraft = {};
+  function prefCell(t, podeAlocar){
+    const list = t.feriasPref || [];
+    const d = prefDraft[t.id] = prefDraft[t.id] || {inicio:'', fim:'', notas:''};
+    const save = async (nova)=>{
+      try{ await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasPref:nova})}); await loadData(); render(); }
+      catch(err){ alert(err.error||'Erro ao salvar.'); }
+    };
+    const box = el('div',{style:'min-width:200px;'});
+    list.forEach(p=>{
+      box.appendChild(el('div',{style:'display:flex; gap:4px; align-items:center; font-size:11.5px; margin-bottom:3px;'},
+        el('span',{}, fmtShort(fromISO(p.inicio))+' a '+fmtShort(fromISO(p.fim))+(p.notas?(' · '+p.notas):'')),
+        podeAlocar ? el('button',{class:'btn ghost small', style:'padding:0 6px;', title:'Remover', onclick:()=>save(list.filter(x=>x.id!==p.id))}, '×') : null));
+    });
+    if(podeAlocar){
+      box.appendChild(el('div',{style:'display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;'},
+        el('input',{type:'date', value:d.inicio, style:'padding:3px 4px; width:118px;', onchange:(e)=>d.inicio=e.target.value}),
+        el('input',{type:'date', value:d.fim, style:'padding:3px 4px; width:118px;', onchange:(e)=>d.fim=e.target.value}),
+        el('input',{type:'text', placeholder:'obs.', value:d.notas, style:'padding:3px 6px; width:80px;', oninput:(e)=>d.notas=e.target.value}),
+        el('button',{class:'btn small', title:'Adicionar data solicitada', onclick:()=>{
+          if(!d.inicio || !d.fim || d.fim<d.inicio){ alert('Informe início e fim válidos.'); return; }
+          const nova = list.concat([{id:String(Date.now()), inicio:d.inicio, fim:d.fim, notas:d.notas||''}]);
+          prefDraft[t.id] = null; save(nova);
+        }}, '+')));
+    } else if(list.length===0) box.appendChild(el('span',{class:'sub'}, '—'));
+    return box;
   }
 
   function renderFeriasManage(){
@@ -1140,7 +1172,7 @@
         body.appendChild(el('tr',{},
           el('td',{}, el('b',{}, t.nome)), el('td',{}, admInput),
           el('td',{}, r ? (fmtShort(r.emAquisicao.ini)+' a '+fmtShort(r.emAquisicao.fim)) : '—'),
-          el('td',{colspan:'6', class:'sub'}, r ? ('Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1))) : 'Informe a data de admissão')
+          el('td',{colspan:'7', class:'sub'}, r ? ('Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1))) : 'Informe a data de admissão')
         ));
         return;
       }
@@ -1155,6 +1187,7 @@
       if(s){
         sugCell = el('div',{},
           el('div',{}, fmtShort(s.ini)+' a '+fmtShort(s.fim)+' ('+s.dur+'d)'),
+          s.pref ? el('div',{style:'font-size:11px; color:'+(s.atendePref?'var(--teal)':'var(--amber)')+';'}, s.atendePref?'✓ data solicitada':'solicitada conflita — alternativa') : null,
           s.semJanela ? el('div',{style:'color:var(--red); font-size:11px;'}, '⚠ passa do prazo') : null,
           podeAlocar ? el('button',{class:'btn small', style:'margin-top:4px;', onclick:()=>{
             novoFerias = {tecnicoId:t.id, statusFerias:'Agendado', inicio:toISO(s.ini), fim:toISO(s.fim), notas:''};
@@ -1165,15 +1198,16 @@
         el('td',{}, el('b',{}, t.nome)), el('td',{}, admInput),
         el('td',{}, r.ini ? (fmtShort(r.ini)+' a '+fmtShort(r.fim)) : '—'),
         el('td',{}, el('b',{}, fmtLong(r.limite)), r.manual ? el('div',{class:'sub'}, '(data manual)') : null),
-        el('td',{}, String(r.gozados), ajInput),
+        el('td',{}, el('div',{}, r.gozados+' d'), ajInput ? el('div',{class:'sub', style:'font-size:10.5px;'}, 'tirados fora do sistema: ', ajInput) : null),
         el('td',{}, String(r.prog)),
         el('td',{}, el('b',{}, String(r.aProg))),
         el('td',{}, badge),
+        el('td',{}, prefCell(t, podeAlocar)),
         el('td',{}, sugCell)
       ));
     });
     wrap.appendChild(el('div',{class:'table-wrap'}, el('table',{class:'report-table'},
-      el('thead',{}, el('tr',{}, ['Técnico','Admissão','Aquisitivo','Iniciar até','Gozados','Programados','A programar','Situação','Sugestão intercalada'].map(h=>el('th',{},h)))),
+      el('thead',{}, el('tr',{}, ['Técnico','Admissão','Aquisitivo','Iniciar até','Dias tirados','Programados','A programar','Situação','Datas solicitadas','Sugestão intercalada'].map(h=>el('th',{},h)))),
       body)));
 
     // registrar período
