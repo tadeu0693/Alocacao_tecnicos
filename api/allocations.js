@@ -42,7 +42,8 @@ export default async function handler(req, res) {
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
 
     if (req.method === 'POST') {
-      if (!['admin','editor','supervisor'].includes(user.papel)) return res.status(403).json({ error: 'Sem permissão.' });
+      const okPost = ['admin','editor','supervisor'].includes(user.papel) || (user.papel === 'planejador' && req.body && req.body.ferias);
+      if (!okPost) return res.status(403).json({ error: 'Sem permissão.' });
       const { tecnicoId, projetoId, tipo, obra, local, endereco, latitude, longitude, inicio, fim, horaInicio, horaFim, notas, emergencial, emergencialModo, ferias, statusFerias, diasVendidos } = req.body || {};
       if (!tecnicoId || !obra || !inicio || !fim) return res.status(400).json({ error: 'Dados incompletos.' });
       let allocations = await getJSON('allocations', []);
@@ -56,10 +57,12 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      if (!['admin','editor','supervisor'].includes(user.papel)) return res.status(403).json({ error: 'Sem permissão.' });
+      const isPlan = user.papel === 'planejador';
+      if (!['admin','editor','supervisor'].includes(user.papel) && !isPlan) return res.status(403).json({ error: 'Sem permissão.' });
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'ID é obrigatório.' });
       let allocations = await getJSON('allocations', []);
+      if (isPlan) { const al = allocations.find(a => a.id === id); if (!al || !al.ferias) return res.status(403).json({ error: 'Sem permissão.' }); }
       allocations = allocations.filter(a => a.id !== id);
       await setJSON('allocations', allocations);
       return res.status(200).json({ ok: true });

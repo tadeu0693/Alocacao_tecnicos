@@ -707,6 +707,23 @@
     return wrap;
   }
 
+  function renderMinhasFerias(me){
+    const s = el('div',{}); s.appendChild(el('div',{class:'section-title'}, 'Minhas férias'));
+    const r = feriasPeriodo(me);
+    const box = el('div',{class:'card'});
+    if(!r){ box.appendChild(el('div',{class:'sub'}, 'Data de admissão não cadastrada.')); }
+    else if(r.emAquisicao){ box.appendChild(el('div',{class:'sub'}, 'Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1)))); }
+    else {
+      box.appendChild(el('div',{class:'card-sub'}, 'Período aquisitivo: '+fmtLong(r.ini)+' a '+fmtLong(r.fim)));
+      box.appendChild(el('div',{class:'card-sub'}, 'Iniciar até: ', el('b',{}, fmtLong(r.limite)), ' · '+r.nivel.label));
+      box.appendChild(el('div',{class:'card-sub'}, 'Direito 30 d · tirados '+r.gozados+' d'+(r.vend?(' (inclui '+r.vend+' vendidos)'):'')+' · programados '+r.prog+' d · a programar '+Math.max(0,r.aProg-r.solic)+' d'));
+    }
+    const per = feriasAllocs().filter(a=>a.tecnicoId===me.id).sort((x,y)=> x.inicio<y.inicio?-1:1);
+    per.forEach(a=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px;'}, (a.statusFerias==='Aprovado'?'✓ ':'')+(a.statusFerias||'Programado')+' · '+fmtLong(fromISO(a.inicio))+' a '+fmtLong(fromISO(a.fim))+' · '+diasDe(a)+' dias'+(a.diasVendidos?(' + '+a.diasVendidos+' vendidos'):''))));
+    (me.feriasPref||[]).forEach(p=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px; color:var(--amber);'}, 'Solicitada · '+fmtLong(fromISO(p.inicio))+' a '+fmtLong(fromISO(p.fim)))));
+    s.appendChild(box); return s;
+  }
+
   function renderTecnicoView(){
     const me = tecById(currentUser.tecnicoId);
     const wrap = el('div',{});
@@ -765,6 +782,7 @@
       if(list.length===0){ s.appendChild(el('div',{class:'sub'}, emptyMsg)); return s; }
       const c = el('div',{class:'cards'}); list.forEach(a=>c.appendChild(card(a))); s.appendChild(c); return s;
     }
+    body.appendChild(renderMinhasFerias(me));
     body.appendChild(section('Agora', atual, 'Nenhuma alocação em andamento hoje.'));
     body.appendChild(section('Próximas', proximas, 'Nada agendado à frente.'));
     if(anteriores.length>0) body.appendChild(section('Concluídas', anteriores.slice(-6).reverse(), ''));
@@ -777,10 +795,11 @@
   function tabsForPapel(papel){
     if(papel==='admin') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios','usuarios'];
     if(papel==='editor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
-    if(papel==='planejador') return ['quadro','projetos','concluidos','relatorios'];
+    if(papel==='planejador') return ['quadro','ferias','projetos','concluidos','relatorios'];
     if(papel==='supervisor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
     return ['quadro','tecnicos','projetos','concluidos','relatorios'];
   }
+  function canFerias(papel){ return ['admin','editor','supervisor','planejador'].includes(papel); }
   function canAllocate(papel){ return ['admin','editor','supervisor'].includes(papel); }
   function canManageProjetos(papel){ return ['admin','editor','planejador'].includes(papel); }
   const TAB_LABEL = {quadro:'Quadro', tecnicos:'Técnicos', ferias:'Férias', projetos:'Projetos', concluidos:'Concluídos', relatorios:'Relatórios', usuarios:'Usuários'};
@@ -1199,7 +1218,7 @@
 
   function renderFeriasManage(){
     const wrap = el('div',{class:'manage-wrap'});
-    const podeAlocar = canAllocate(currentUser.papel);
+    const podeAlocar = canFerias(currentUser.papel);
     const today = startOfDay(new Date());
     wrap.appendChild(el('h2',{}, 'Férias'));
     wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'},

@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   try {
     const user = await getUserFromReq(req);
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
-    if (!['admin','editor','supervisor'].includes(user.papel)) return res.status(403).json({ error: 'Sem permissão.' });
+    const isPlan = user.papel === 'planejador';
+    if (!['admin','editor','supervisor'].includes(user.papel) && !(isPlan && req.method === 'PATCH')) return res.status(403).json({ error: 'Sem permissão.' });
 
     if (req.method === 'POST') {
       const { nome, cargo, local, tipo, feriasLimite, admissao } = req.body || {};
@@ -56,7 +57,9 @@ export default async function handler(req, res) {
       const tecnicos = await getJSON('tecnicos', []);
       const idx = tecnicos.findIndex(t => t.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Técnico não encontrado.' });
-      const { nome, cargo, local, tipo, feriasLimite, admissao, feriasAjuste, feriasPref, feriasFora } = req.body || {};
+      const body = req.body || {};
+      const { feriasLimite, admissao, feriasAjuste, feriasPref, feriasFora } = body;
+      const { nome, cargo, local, tipo } = isPlan ? {} : body;
       if (nome !== undefined) tecnicos[idx].nome = String(nome).trim().toUpperCase();
       if (cargo !== undefined) tecnicos[idx].cargo = cargo;
       if (local !== undefined) tecnicos[idx].local = local;
