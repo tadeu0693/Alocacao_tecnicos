@@ -76,15 +76,6 @@ export default async function handler(req, res) {
         let fotoUrl = '', fotoNome = '';
         if (motivo === 'Perda') {
           if (desc.length < 5) return res.status(400).json({ error: 'Informe os detalhes da perda.' });
-        } else {
-          if (!dataBase64 || !filename || !String(mimeType || '').startsWith('image/')) return res.status(400).json({ error: 'A foto do item danificado é obrigatória.' });
-          if (!process.env.BLOB_READ_WRITE_TOKEN) return res.status(500).json({ error: 'Armazenamento de arquivos ainda não conectado a este projeto (Vercel: Storage → Blob).' });
-          const buffer = Buffer.from(dataBase64, 'base64');
-          if (buffer.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'Foto muito grande.' });
-          const { put } = await import('@vercel/blob');
-          const safeName = String(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-          const blob = await put(`trocas/${id}/${Date.now()}-${safeName}`, buffer, { access: 'public', contentType: mimeType });
-          fotoUrl = blob.url; fotoNome = filename;
         }
         const sol = { id: crypto.randomUUID(), tipo, item, motivo, descricao: desc, fotoUrl, fotoNome, em: new Date().toISOString(), por: user.email, status: 'Pendente' };
         t.solicitacoes.push(sol);

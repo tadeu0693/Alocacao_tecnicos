@@ -2017,27 +2017,18 @@
         el('div',{class:'sub'}, (d.tipo==='epi'?'🦺 EPI: ':'🧰 Ferramenta: ')+d.item),
         d.erro ? el('div',{class:'error-box'}, d.erro) : null,
         el('div',{class:'field'}, el('label',{},'Motivo'), selectEl(d.motivo, ['Danificado','Perda'], v=>{ d.motivo=v; d.erro=''; render(); })),
-        d.motivo==='Danificado' ? el('div',{class:'field'}, el('label',{},'Foto do item danificado (obrigatória)'),
-          el('input',{type:'file', accept:'image/*', onchange: async (e)=>{
-            const f = e.target.files[0]; if(!f) return;
-            try{ d.foto = await fotoParaBase64(f); d.erro=''; }catch(err){ d.erro='Não foi possível ler a imagem.'; }
-            render();
-          }}),
-          d.foto ? el('img',{src:d.foto.preview, style:'margin-top:8px; max-width:100%; max-height:200px; border-radius:8px; border:1px solid var(--border);'}) : null
-        ) : null,
+        d.motivo==='Danificado' ? el('div',{class:'warn-box'}, '⚠ A substituição só será realizada mediante a entrega da ferramenta/EPI danificado.') : null,
         el('div',{class:'field'}, el('label',{}, d.motivo==='Perda' ? 'Informe como/onde foi a perda (obrigatório)' : 'Descrição do dano (opcional)'),
           el('textarea',{oninput:(e)=>d.descricao=e.target.value}, d.descricao)),
         el('div',{class:'modal-actions'},
           el('button',{class:'btn ghost', onclick:()=>{ modal=null; render(); }}, 'Cancelar'),
           el('button',{class:'btn', disabled:d.busy, onclick: async ()=>{
             d.erro='';
-            if(d.motivo==='Danificado' && !d.foto){ d.erro='Anexe a foto do item danificado.'; render(); return; }
             if(d.motivo==='Perda' && (d.descricao||'').trim().length<5){ d.erro='Informe os detalhes da perda.'; render(); return; }
             d.busy=true; render();
             try{
               await api('/api/tecnicos?id='+currentUser.tecnicoId, {method:'PATCH', body:JSON.stringify({
-                action:'solicitar_troca', tipo:d.tipo, item:d.item, motivo:d.motivo, descricao:d.descricao,
-                filename: d.foto?d.foto.nome:'', mimeType: d.foto?d.foto.tipo:'', dataBase64: d.foto?d.foto.dataBase64:''})});
+                action:'solicitar_troca', tipo:d.tipo, item:d.item, motivo:d.motivo, descricao:d.descricao})});
               await loadData(); modal=null; render();
             }catch(e){ d.busy=false; d.erro=e.error||'Erro ao enviar solicitação.'; render(); }
           }}, d.busy?'Enviando…':'Enviar solicitação')
