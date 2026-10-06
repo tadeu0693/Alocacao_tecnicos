@@ -95,7 +95,8 @@ export default async function handler(req, res) {
       if (body.action === 'atender_troca') {
         const sol = (tecnicos[idx].solicitacoes || []).find(x => x.id === body.id);
         if (!sol) return res.status(404).json({ error: 'Solicitação não encontrada.' });
-        sol.status = 'Atendida'; sol.atendidaEm = new Date().toISOString(); sol.atendidaPor = user.email;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.dataTroca || ''))) return res.status(400).json({ error: 'Informe a data da troca.' });
+        sol.status = 'Atendida'; sol.dataTroca = body.dataTroca; sol.atendidaEm = new Date().toISOString(); sol.atendidaPor = user.email;
         await setJSON('tecnicos', tecnicos);
         return res.status(200).json({ ok: true });
       }

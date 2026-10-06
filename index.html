@@ -733,7 +733,14 @@
   }
   function trocaBadge(t){
     const p = pendTrocas(t);
-    if(p.length===0) return null;
+    const hist = (t.solicitacoes||[]).length;
+    if(p.length===0){
+      if(hist===0) return null;
+      return el('span',{class:'status-badge', style:'background:var(--panel-alt); color:var(--text-faint); cursor:pointer;',
+        title:'Ver histórico de trocas',
+        onclick:(ev)=>{ ev.stopPropagation(); modal={mode:'trocas', data:{tecnicoId:t.id}}; render(); }},
+        '🕘 Histórico de trocas ('+hist+')');
+    }
     return el('span',{class:'status-badge', style:'background:var(--amber-dim); color:var(--amber); cursor:pointer;',
       title:'Ver solicitações de troca',
       onclick:(ev)=>{ ev.stopPropagation(); modal={mode:'trocas', data:{tecnicoId:t.id}}; render(); }},
@@ -784,7 +791,7 @@
       hist.forEach(x=> c.appendChild(el('div',{class:'card'},
         el('div',{class:'card-top'},
           el('div',{}, el('div',{class:'card-title', style:'font-size:13px;'}, x.item),
-            el('div',{class:'card-sub'}, x.motivo+' · '+new Date(x.em).toLocaleDateString('pt-BR'))),
+            el('div',{class:'card-sub'}, x.motivo+' · '+new Date(x.em).toLocaleDateString('pt-BR')+(x.dataTroca?(' · trocado em '+fmtShort(fromISO(x.dataTroca))):''))),
           el('span',{class:'tipo-tag '+(x.status==='Atendida'?'tag-Manutenção':'tag-Outro')}, x.status)))));
       body.appendChild(c);
     }
@@ -2028,7 +2035,7 @@
     }
     if(modal.mode==='trocas'){
       const tec = tecById(modal.data.tecnicoId);
-      const lista = (tec.solicitacoes||[]).slice().sort((a,b)=> a.em<b.em?1:-1).slice(0,15);
+      const lista = (tec.solicitacoes||[]).slice().sort((a,b)=> a.em<b.em?1:-1).slice(0,50);
       const box = el('div',{class:'modal'},
         el('h2',{}, '🔧 Solicitações de troca'), el('div',{class:'sub'}, tec.nome)
       );
@@ -2041,11 +2048,15 @@
           x.descricao ? el('div',{class:'card-sub', style:'margin-top:6px;'}, x.descricao) : null,
           x.fotoUrl ? el('a',{href:x.fotoUrl, target:'_blank', rel:'noopener'},
             el('img',{src:x.fotoUrl, style:'margin-top:8px; width:100%; max-height:220px; object-fit:cover; border-radius:8px; border:1px solid var(--border);'})) : null,
-          x.status==='Pendente' ? el('div',{style:'margin-top:10px;'},
+          x.status==='Pendente' ? el('div',{style:'margin-top:10px; display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;'},
+            el('div',{class:'field', style:'margin-bottom:0;'}, el('label',{},'Data da troca'),
+              el('input',{type:'date', value:(modal.data.datas&&modal.data.datas[x.id])||toISO(new Date()), onchange:(e)=>{ modal.data.datas=modal.data.datas||{}; modal.data.datas[x.id]=e.target.value; }})),
             el('button',{class:'btn small', onclick: async ()=>{
-              try{ await api('/api/tecnicos?id='+tec.id, {method:'PATCH', body:JSON.stringify({action:'atender_troca', id:x.id})}); await loadData(); modal={mode:'trocas', data:{tecnicoId:tec.id}}; render(); }
+              const dataTroca = (modal.data.datas&&modal.data.datas[x.id])||toISO(new Date());
+              if(!dataTroca){ alert('Informe a data da troca.'); return; }
+              try{ await api('/api/tecnicos?id='+tec.id, {method:'PATCH', body:JSON.stringify({action:'atender_troca', id:x.id, dataTroca})}); await loadData(); modal={mode:'trocas', data:{tecnicoId:tec.id}}; render(); }
               catch(e){ alert(e.error||'Erro ao atualizar.'); }
-            }}, '✓ Marcar como atendida')) : null
+            }}, '✓ Confirmar troca')) : (x.dataTroca ? el('div',{class:'card-sub', style:'margin-top:8px;'}, '✓ Trocado em '+fmtLong(fromISO(x.dataTroca))+(x.atendidaPor?(' · '+x.atendidaPor):'')) : null)
         ));
       });
       if(lista.length===0) box.appendChild(el('div',{class:'sub'}, 'Nenhuma solicitação.'));
