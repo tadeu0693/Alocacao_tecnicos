@@ -719,7 +719,7 @@
     else if(r.emAquisicao){ box.appendChild(el('div',{class:'sub'}, 'Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1)))); }
     else {
       box.appendChild(el('div',{class:'card-sub'}, 'Período aquisitivo: '+fmtLong(r.ini)+' a '+fmtLong(r.fim)));
-      box.appendChild(el('div',{class:'card-sub'}, 'Solicitar/iniciar até: ', el('b',{}, fmtLong(limTec)), ' · '+r.nivel.label));
+      box.appendChild(el('div',{class:'card-sub'}, 'Solicitar até: ', el('b',{}, fmtLong(limTec)), ' · prazo final para iniciar: '+fmtLong(r.limite)+' · '+r.nivel.label));
       box.appendChild(el('div',{class:'card-sub'}, 'Direito 30 d · tirados '+r.gozados+' d'+(r.vend?(' (inclui '+r.vend+' vendidos)'):'')+' · programados '+r.prog+' d · a programar '+Math.max(0,r.aProg-r.solic)+' d'));
     }
     const per = feriasAllocs().filter(a=>a.tecnicoId===me.id).sort((x,y)=> x.inicio<y.inicio?-1:1);
@@ -741,8 +741,8 @@
       el('button',{class:'btn small', onclick:()=>{
         if(!d.inicio || !d.fim || d.fim<d.inicio){ alert('Informe início e fim válidos.'); return; }
         const i = fromISO(d.inicio), f = fromISO(d.fim);
-        if(i<=startOfDay(new Date())){ alert('A data de início deve ser futura.'); return; }
-        if(limTec && i>limTec){ alert('Data após o seu limite para solicitar ('+fmtLong(limTec)+').'); return; }
+        if(i<startOfDay(new Date())){ alert('A data de início não pode ser no passado.'); return; }
+        if(r && r.limite && i>r.limite){ alert('Início após o prazo legal ('+fmtLong(r.limite)+'). Escolha uma data até esse dia.'); return; }
         const ocupado = feriasAllocs().some(o=> o.tecnicoId!==me.id && overlaps(i,f,fromISO(o.inicio),fromISO(o.fim)));
         if(ocupado){ alert('Data não disponível: já existe outra pessoa de férias nesse período. Escolha outras datas.'); return; }
         const nova = lista.concat([{id:String(Date.now()), inicio:d.inicio, fim:d.fim, notas:d.notas||''}]);
