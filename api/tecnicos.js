@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const isPlan = user.papel === 'planejador';
     const isTec = user.papel === 'tecnico';
     if (isTec) {
-      if (req.method !== 'PATCH' || (req.body || {}).action !== 'solicitar_troca' || req.query.id !== user.tecnicoId) return res.status(403).json({ error: 'Sem permissão.' });
+      if (req.method !== 'PATCH' || !['solicitar_troca','ferias_pref'].includes((req.body || {}).action) || req.query.id !== user.tecnicoId) return res.status(403).json({ error: 'Sem permissão.' });
     } else if (!['admin','editor','supervisor'].includes(user.papel) && !(isPlan && req.method === 'PATCH')) return res.status(403).json({ error: 'Sem permissão.' });
 
     if (req.method === 'POST') {
@@ -61,6 +61,21 @@ export default async function handler(req, res) {
       const idx = tecnicos.findIndex(t => t.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Técnico não encontrado.' });
       const body = req.body || {};
+
+      if (body.action === 'ferias_pref') {
+        if (!isTec) return res.status(403).json({ error: 'Sem permissão.' });
+        const nova = cleanPref(body.feriasPref);
+        const atuais = (tecnicos[idx].feriasPref || []).map(p => p.id);
+        const allocs = await getJSON('allocations', []);
+        const outras = allocs.filter(a => a.ferias && a.tecnicoId !== id);
+        for (const p of nova) {
+          if (atuais.includes(p.id)) continue; // já existente
+          if (outras.some(a => p.inicio <= a.fim && a.inicio <= p.fim)) return res.status(409).json({ error: 'Data não disponível: já existe outra pessoa de férias nesse período.' });
+        }
+        tecnicos[idx].feriasPref = nova;
+        await setJSON('tecnicos', tecnicos);
+        return res.status(200).json({ tecnico: tecnicos[idx] });
+      }
 
       if (body.action === 'solicitar_troca') {
         if (!isTec) return res.status(403).json({ error: 'Sem permissão.' });

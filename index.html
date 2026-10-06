@@ -709,20 +709,47 @@
     return wrap;
   }
 
+  let feriasReqDraft = {inicio:'', fim:'', notas:''};
   function renderMinhasFerias(me){
     const s = el('div',{}); s.appendChild(el('div',{class:'section-title'}, 'Minhas férias'));
     const r = feriasPeriodo(me);
     const box = el('div',{class:'card'});
+    const limTec = r && r.limite ? (()=>{ const d=new Date(r.limite); d.setMonth(d.getMonth()-2); return d; })() : null;
     if(!r){ box.appendChild(el('div',{class:'sub'}, 'Data de admissão não cadastrada.')); }
     else if(r.emAquisicao){ box.appendChild(el('div',{class:'sub'}, 'Em aquisição — direito a partir de '+fmtLong(addDays(r.emAquisicao.fim,1)))); }
     else {
       box.appendChild(el('div',{class:'card-sub'}, 'Período aquisitivo: '+fmtLong(r.ini)+' a '+fmtLong(r.fim)));
-      box.appendChild(el('div',{class:'card-sub'}, 'Iniciar até: ', el('b',{}, fmtLong(r.limite)), ' · '+r.nivel.label));
+      box.appendChild(el('div',{class:'card-sub'}, 'Solicitar/iniciar até: ', el('b',{}, fmtLong(limTec)), ' · '+r.nivel.label));
       box.appendChild(el('div',{class:'card-sub'}, 'Direito 30 d · tirados '+r.gozados+' d'+(r.vend?(' (inclui '+r.vend+' vendidos)'):'')+' · programados '+r.prog+' d · a programar '+Math.max(0,r.aProg-r.solic)+' d'));
     }
     const per = feriasAllocs().filter(a=>a.tecnicoId===me.id).sort((x,y)=> x.inicio<y.inicio?-1:1);
     per.forEach(a=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px;'}, (a.statusFerias==='Aprovado'?'✓ ':'')+(a.statusFerias||'Programado')+' · '+fmtLong(fromISO(a.inicio))+' a '+fmtLong(fromISO(a.fim))+' · '+diasDe(a)+' dias'+(a.diasVendidos?(' + '+a.diasVendidos+' vendidos'):''))));
-    (me.feriasPref||[]).forEach(p=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px; color:var(--amber);'}, 'Solicitada · '+fmtLong(fromISO(p.inicio))+' a '+fmtLong(fromISO(p.fim)))));
+    const savePref = async (nova)=>{
+      try{ await api('/api/tecnicos?id='+me.id, {method:'PATCH', body:JSON.stringify({action:'ferias_pref', feriasPref:nova})}); await loadData(); render(); }
+      catch(e){ alert(e.error||'Erro ao salvar.'); }
+    };
+    const lista = me.feriasPref||[];
+    lista.forEach(p=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px; color:var(--amber); display:flex; gap:8px; align-items:center;'},
+      el('span',{}, 'Solicitada (aguardando aprovação) · '+fmtLong(fromISO(p.inicio))+' a '+fmtLong(fromISO(p.fim))+(p.notas?(' · '+p.notas):'')),
+      el('button',{class:'btn ghost small', style:'padding:0 6px;', title:'Cancelar solicitação', onclick:()=>savePref(lista.filter(x=>x.id!==p.id))}, '×'))));
+    const d = feriasReqDraft;
+    box.appendChild(el('div',{class:'section-title', style:'margin-top:10px;'}, 'Solicitar datas'));
+    box.appendChild(el('div',{style:'display:flex; gap:6px; flex-wrap:wrap; align-items:center;'},
+      el('input',{type:'date', value:d.inicio, onchange:(e)=>d.inicio=e.target.value}),
+      el('input',{type:'date', value:d.fim, onchange:(e)=>d.fim=e.target.value}),
+      el('input',{type:'text', placeholder:'obs.', value:d.notas, style:'width:120px;', oninput:(e)=>d.notas=e.target.value}),
+      el('button',{class:'btn small', onclick:()=>{
+        if(!d.inicio || !d.fim || d.fim<d.inicio){ alert('Informe início e fim válidos.'); return; }
+        const i = fromISO(d.inicio), f = fromISO(d.fim);
+        if(i<=startOfDay(new Date())){ alert('A data de início deve ser futura.'); return; }
+        if(limTec && i>limTec){ alert('Data após o seu limite para solicitar ('+fmtLong(limTec)+').'); return; }
+        const ocupado = feriasAllocs().some(o=> o.tecnicoId!==me.id && overlaps(i,f,fromISO(o.inicio),fromISO(o.fim)));
+        if(ocupado){ alert('Data não disponível: já existe outra pessoa de férias nesse período. Escolha outras datas.'); return; }
+        const nova = lista.concat([{id:String(Date.now()), inicio:d.inicio, fim:d.fim, notas:d.notas||''}]);
+        feriasReqDraft = {inicio:'', fim:'', notas:''};
+        savePref(nova);
+      }}, 'Solicitar')));
+    box.appendChild(el('div',{class:'sub', style:'font-size:11px; margin-top:6px;'}, 'A aprovação é feita pela gestão.'));
     s.appendChild(box); return s;
   }
 
