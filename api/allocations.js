@@ -104,6 +104,7 @@ export default async function handler(req, res) {
       }
 
       if (action === 'remove_anexo') {
+        if (!canManage) return res.status(403).json({ error: 'Sem permissão.' });
         const { url } = req.body || {};
         if (!url) return res.status(400).json({ error: 'URL é obrigatória.' });
         alloc.anexos = (alloc.anexos || []).filter(a => a.url !== url);
@@ -129,6 +130,7 @@ export default async function handler(req, res) {
       }
 
       if (action === 'remove_hora_extra') {
+        if (!canManage) return res.status(403).json({ error: 'Sem permissão.' });
         const { id: entryId } = req.body || {};
         if (!entryId) return res.status(400).json({ error: 'ID é obrigatório.' });
         alloc.horasExtras = (alloc.horasExtras || []).filter(h => h.id !== entryId);
@@ -151,6 +153,7 @@ export default async function handler(req, res) {
       }
 
       if (action === 'remove_despesa') {
+        if (!canManage) return res.status(403).json({ error: 'Sem permissão.' });
         const { id: entryId } = req.body || {};
         if (!entryId) return res.status(400).json({ error: 'ID é obrigatório.' });
         alloc.despesas = (alloc.despesas || []).filter(d => d.id !== entryId);
