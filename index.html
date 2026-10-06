@@ -728,6 +728,16 @@
 
   /* ================= trocas de ferramenta / EPI ================= */
   function pendTrocas(t){ return (t.solicitacoes||[]).filter(x=>x.status==='Pendente'); }
+  function ultimaTroca(t){
+    return (t.solicitacoes||[]).filter(x=>x.status==='Atendida' && x.dataTroca).sort((a,b)=> a.dataTroca<b.dataTroca?1:-1)[0] || null;
+  }
+  function trocasResumo(t){
+    const p = pendTrocas(t).length, u = ultimaTroca(t);
+    const partes = [];
+    if(p>0) partes.push('🔧 '+p+' troca(s) pendente(s)');
+    if(u) partes.push('✓ última troca: '+u.item+' em '+fmtShort(fromISO(u.dataTroca)));
+    return partes.join(' · ');
+  }
   function kitItems(t, tipo){
     return String((tipo==='epi' ? t.epi : t.ferramentas)||'').split('\n').map(x=>x.trim()).filter(Boolean);
   }
@@ -739,7 +749,7 @@
       return el('span',{class:'status-badge', style:'background:var(--panel-alt); color:var(--text-faint); cursor:pointer;',
         title:'Ver histórico de trocas',
         onclick:(ev)=>{ ev.stopPropagation(); modal={mode:'trocas', data:{tecnicoId:t.id}}; render(); }},
-        '🕘 Histórico de trocas ('+hist+')');
+        '🕘 Trocas ('+hist+')'+(ultimaTroca(t)?(' · última: '+ultimaTroca(t).item+' '+fmtShort(fromISO(ultimaTroca(t).dataTroca))):''));
     }
     return el('span',{class:'status-badge', style:'background:var(--amber-dim); color:var(--amber); cursor:pointer;',
       title:'Ver solicitações de troca',
@@ -1092,7 +1102,8 @@
         t.carro ? ('🚗 '+t.carro) : null,
         t.ferramentas ? '🧰 ferramentas' : null,
         t.material ? '📦 material' : null,
-        t.epi ? '🦺 EPI' : null
+        t.epi ? '🦺 EPI' : null,
+        trocasResumo(t) || null
       ].filter(Boolean).join(' · ');
       list.appendChild(el('div',{class:'manage-item'},
         el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, t.cargo+' · '+t.local+' · '+t.tipo),
@@ -1110,6 +1121,7 @@
             tecBtn('ferramentas','🧰 Ferramentas'),
             tecBtn('material','📦 Material'),
             tecBtn('epi','🦺 EPI'),
+            el('button',{class:'btn ghost small', onclick:()=>{ modal={mode:'trocas', data:{tecnicoId:t.id}}; render(); }}, '🔧 Trocas'+((t.solicitacoes||[]).length?(' ('+t.solicitacoes.length+')'):'')),
             el('button',{class:'btn ghost small', onclick:()=>{ editingTecnicoId=t.id; editTecnicoDraft={nome:t.nome, cargo:t.cargo, local:t.local, tipo:t.tipo}; render(); }}, 'Editar'),
             el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'tecnico', id:t.id}; render(); }}, 'Excluir')
           ]
