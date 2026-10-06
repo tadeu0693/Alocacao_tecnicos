@@ -1131,6 +1131,26 @@
     }catch(e){ alert(e.error||'Erro ao registrar.'); }
   }
 
+  function exportarRelatorioFerias(){
+    const fmt = (iso)=> iso ? fmtLong(fromISO(iso)) : '';
+    const rows = [['Técnico','Admissão','Iniciar até','Situação','Tipo','Status','Início','Fim','Dias','Dias vendidos','Observações']];
+    TECNICOS.slice().sort((x,y)=>x.nome.localeCompare(y.nome)).forEach(t=>{
+      const r = feriasPeriodo(t);
+      const base = [t.nome, fmt(t.admissao), r && r.limite ? fmtLong(r.limite) : '', r && r.nivel ? r.nivel.label : (r && r.emAquisicao ? 'Em aquisição' : '')];
+      const itens = [];
+      feriasAllocs().filter(a=>a.tecnicoId===t.id).forEach(a=> itens.push({i:a.inicio, row:['Programado', a.statusFerias||'', fmt(a.inicio), fmt(a.fim), diasDe(a), a.diasVendidos||0, a.notas||'']}));
+      (t.feriasPref||[]).forEach(p=> itens.push({i:p.inicio, row:['Solicitada', 'Solicitada', fmt(p.inicio), fmt(p.fim), diffDays(fromISO(p.fim),fromISO(p.inicio))+1, 0, p.notas||'']}));
+      itens.sort((x,y)=> x.i<y.i?-1:1);
+      if(!itens.length) return;
+      itens.forEach(it=> rows.push(base.concat(it.row)));
+    });
+    const csv = '\ufeff' + rows.map(l=> l.map(c=> '"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download = 'relatorio-ferias-'+toISO(new Date())+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
   let prefDraft = {}, editingPref = null;
   function prefCell(t, podeAlocar){
     const list = t.feriasPref || [];
@@ -1218,6 +1238,7 @@
       return x.t.nome.localeCompare(y.t.nome);
     });
 
+    wrap.appendChild(el('div',{style:'margin:8px 0;'}, el('button',{class:'btn', onclick:exportarRelatorioFerias}, '⬇ Baixar relatório (programadas + solicitadas)')));
     wrap.appendChild(el('div',{class:'section-title'}, 'Prazo de férias por técnico'));
     const body = el('tbody',{});
     linhas.forEach(({t,r})=>{
