@@ -483,6 +483,7 @@
     return 'https://waze.com/ul?q=' + encodeURIComponent(query) + '&navigate=yes';
   }
   function colleaguesOn(alloc){
+    if(Array.isArray(alloc.colegas)) return alloc.colegas;
     const obraKey = (alloc.obra||"").trim().toLowerCase();
     if(!obraKey || alloc.tipo==="Indisponibilidade") return [];
     return allocations.filter(a=>
