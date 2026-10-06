@@ -1001,8 +1001,17 @@
         ));
         return;
       }
+      const tecBtn = (kind, label)=> el('button',{class:'btn ghost small', onclick:()=>{
+        modal = {mode:'tecnico-info', data:{id:t.id, kind, valor:t[kind]||''}}; render();
+      }}, label);
+      const extras = [
+        t.carro ? ('🚗 '+t.carro) : null,
+        t.ferramentas ? '🧰 ferramentas' : null,
+        t.material ? '📦 material' : null
+      ].filter(Boolean).join(' · ');
       list.appendChild(el('div',{class:'manage-item'},
-        el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, t.cargo+' · '+t.local+' · '+t.tipo)),
+        el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, t.cargo+' · '+t.local+' · '+t.tipo),
+          extras ? el('span',{}, extras) : null),
         el('div',{class:'manage-actions'},
           confirming ? [
             el('span',{class:'sub'}, nAlloc>0 ? ('remove '+nAlloc+' alocação(ões)') : ''),
@@ -1012,6 +1021,9 @@
             }}, 'Confirmar exclusão'),
             el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete=null; render(); }}, 'Cancelar')
           ] : [
+            tecBtn('carro','🚗 Carro'),
+            tecBtn('ferramentas','🧰 Ferramentas'),
+            tecBtn('material','📦 Material'),
             el('button',{class:'btn ghost small', onclick:()=>{ editingTecnicoId=t.id; editTecnicoDraft={nome:t.nome, cargo:t.cargo, local:t.local, tipo:t.tipo}; render(); }}, 'Editar'),
             el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'tecnico', id:t.id}; render(); }}, 'Excluir')
           ]
@@ -1847,6 +1859,29 @@
 
   function renderModal(){
     const overlay = el('div',{class:'overlay', onclick:(e)=>{ if(e.target===e.currentTarget){ modal=null; novaHoraExtra=null; novaDespesa=null; render(); } }});
+    if(modal.mode==='tecnico-info'){
+      const d = modal.data; const tec = tecById(d.id);
+      const cfg = {
+        carro:{titulo:'🚗 Carro vinculado', sub:'Informe modelo/placa. Deixe vazio se não há carro vinculado.', ph:'Ex: Fiorino ABC-1D23', multi:false},
+        ferramentas:{titulo:'🧰 Ferramentas disponíveis', sub:'Liste as ferramentas que o técnico tem consigo (uma por linha).', ph:'Furadeira\nMultímetro\nNotebook', multi:true},
+        material:{titulo:'📦 Material no carro', sub:'Liste o material que está no carro (uma por linha).', ph:'Cabo UTP 100m\nConectores RJ45', multi:true}
+      }[d.kind];
+      const input = cfg.multi
+        ? el('textarea',{placeholder:cfg.ph, style:'min-height:140px;', oninput:(e)=>d.valor=e.target.value}, d.valor)
+        : el('input',{type:'text', value:d.valor, placeholder:cfg.ph, oninput:(e)=>d.valor=e.target.value});
+      const box = el('div',{class:'modal'},
+        el('h2',{}, cfg.titulo), el('div',{class:'sub'}, tec.nome+' — '+cfg.sub),
+        el('div',{class:'field'}, input),
+        el('div',{class:'modal-actions'},
+          el('button',{class:'btn ghost', onclick:()=>{ modal=null; render(); }}, 'Cancelar'),
+          el('button',{class:'btn', onclick: async ()=>{
+            try{ await api('/api/tecnicos?id='+d.id, {method:'PATCH', body:JSON.stringify({[d.kind]:d.valor})}); await loadData(); modal=null; render(); }
+            catch(e){ alert(e.error||'Erro ao salvar.'); }
+          }}, 'Salvar')
+        )
+      );
+      overlay.appendChild(box); return overlay;
+    }
     if(modal.mode==='minha-senha'){
       const d = modal.data;
       const box = el('div',{class:'modal'},
