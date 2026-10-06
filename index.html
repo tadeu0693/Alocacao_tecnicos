@@ -252,6 +252,7 @@
   let selectedTech = null, filterText = "", filterTipo = "Todos", onlyConflicts = false;
   let modal = null, confirmDelete = null;
   let activeTab = "quadro";
+  let tecTab = "agenda";
 
   let authMode = "login"; // 'login' | 'setup'
   let loginEmail = "", loginSenha = "", loginError = "", loginBusy=false;
@@ -725,6 +726,71 @@
     s.appendChild(box); return s;
   }
 
+  /* ================= trocas de ferramenta / EPI ================= */
+  function pendTrocas(t){ return (t.solicitacoes||[]).filter(x=>x.status==='Pendente'); }
+  function kitItems(t, tipo){
+    return String((tipo==='epi' ? t.epi : t.ferramentas)||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  }
+  function trocaBadge(t){
+    const p = pendTrocas(t);
+    if(p.length===0) return null;
+    return el('span',{class:'status-badge', style:'background:var(--amber-dim); color:var(--amber); cursor:pointer;',
+      title:'Ver solicitações de troca',
+      onclick:(ev)=>{ ev.stopPropagation(); modal={mode:'trocas', data:{tecnicoId:t.id}}; render(); }},
+      '🔧 Troca: '+p[0].item+(p.length>1?(' +'+(p.length-1)):''));
+  }
+  // Reduz a foto (máx. 1280px, JPEG) antes de enviar, pra não estourar o limite de upload.
+  function fotoParaBase64(file){
+    return new Promise((resolve, reject)=>{
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = ()=>{
+        const max = 1280, r = Math.min(1, max/Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width*r); c.height = Math.round(img.height*r);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const dataUrl = c.toDataURL('image/jpeg', 0.8);
+        URL.revokeObjectURL(url);
+        resolve({dataBase64: dataUrl.split(',')[1], preview: dataUrl, nome: (file.name||'foto').replace(/\.[^.]+$/,'')+'.jpg', tipo:'image/jpeg'});
+      };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('img')); };
+      img.src = url;
+    });
+  }
+  function renderTecnicoKit(me){
+    const body = el('div',{class:'tech-view'});
+    const pend = pendTrocas(me);
+    [['ferramenta','🧰 Ferramentas'],['epi','🦺 EPI']].forEach(([tipo, titulo])=>{
+      body.appendChild(el('div',{class:'section-title'}, titulo));
+      const itens = kitItems(me, tipo);
+      if(itens.length===0){ body.appendChild(el('div',{class:'sub'}, 'Nenhum item cadastrado para você.')); return; }
+      const cards = el('div',{class:'cards'});
+      itens.forEach(item=>{
+        const p = pend.find(x=>x.tipo===tipo && x.item===item);
+        cards.appendChild(el('div',{class:'card', style:'display:flex; align-items:center; justify-content:space-between; gap:10px;'},
+          el('div',{class:'card-title', style:'font-size:13px;'}, item),
+          p ? el('span',{class:'tipo-tag tag-Outro'}, 'Troca solicitada · '+p.motivo)
+            : el('button',{class:'btn ghost small', onclick:()=>{
+                modal={mode:'solicitar-troca', data:{tipo, item, motivo:'Danificado', descricao:'', foto:null, erro:'', busy:false}}; render();
+              }}, '🔄 Solicitar troca')
+        ));
+      });
+      body.appendChild(cards);
+    });
+    const hist = (me.solicitacoes||[]).slice().sort((a,b)=> a.em<b.em?1:-1).slice(0,10);
+    if(hist.length>0){
+      body.appendChild(el('div',{class:'section-title'}, 'Minhas solicitações'));
+      const c = el('div',{class:'cards'});
+      hist.forEach(x=> c.appendChild(el('div',{class:'card'},
+        el('div',{class:'card-top'},
+          el('div',{}, el('div',{class:'card-title', style:'font-size:13px;'}, x.item),
+            el('div',{class:'card-sub'}, x.motivo+' · '+new Date(x.em).toLocaleDateString('pt-BR'))),
+          el('span',{class:'tipo-tag '+(x.status==='Atendida'?'tag-Manutenção':'tag-Outro')}, x.status)))));
+      body.appendChild(c);
+    }
+    return body;
+  }
+
   function renderTecnicoView(){
     const me = tecById(currentUser.tecnicoId);
     const wrap = el('div',{});
@@ -737,6 +803,16 @@
       ),
       el('div',{class:'topbar-right'}, whoBadge(), trocarSenhaBtn(), logoutBtn())
     ));
+
+    wrap.appendChild(el('div',{class:'tabs'},
+      el('div',{class:'tab'+(tecTab==='agenda'?' active':''), onclick:()=>{ tecTab='agenda'; render(); }}, 'Minha agenda'),
+      el('div',{class:'tab'+(tecTab==='kit'?' active':''), onclick:()=>{ tecTab='kit'; render(); }}, 'Técnico')
+    ));
+    if(tecTab==='kit'){
+      wrap.appendChild(renderTecnicoKit(me));
+      if(modal) wrap.appendChild(renderModal());
+      return wrap;
+    }
 
     wrap.appendChild(renderTecnicoTimeline(me.id));
 
@@ -892,7 +968,7 @@
       wrap.appendChild(el('div',{class:'tech-row'+(selectedTech===t.id?' selected':''),
         onclick:()=>{ selectedTech = selectedTech===t.id ? null : t.id; render(); }},
         el('div',{class:'tech-name'}, t.nome), el('div',{class:'tech-meta'}, t.cargo+' · '+t.local),
-        el('span',{class:'status-badge '+st.cls}, st.label), feriasAlertaSpan(t)));
+        el('span',{class:'status-badge '+st.cls}, st.label), feriasAlertaSpan(t), trocaBadge(t)));
     });
     if(list.length===0) wrap.appendChild(el('div',{class:'empty'}, 'Nenhum técnico encontrado.'));
     return wrap;
@@ -928,7 +1004,7 @@
       const rowHeight = Math.max(36, laneCount*30+6);
       const track = el('div',{class:'track', style:`height:${rowHeight}px`});
       track.appendChild(el('div',{class:'row-label', style:`width:${nameColWidth}px; height:${rowHeight}px;`},
-        el('span',{class:'n'}, t.nome), el('span',{class:'l'}, t.local)));
+        el('span',{class:'n'}, t.nome+(pendTrocas(t).length?' 🔧':'')), el('span',{class:'l'}, t.local)));
       const daysArea = el('div',{class:'days-area', style:`width:${totalWidth}px; height:${rowHeight}px;`});
       const bg = el('div',{class:'track-bg'});
       days.forEach(d=>{
@@ -1913,6 +1989,67 @@
           }}, 'Salvar')
         )
       );
+      overlay.appendChild(box); return overlay;
+    }
+    if(modal.mode==='solicitar-troca'){
+      const d = modal.data;
+      const box = el('div',{class:'modal'},
+        el('h2',{}, 'Solicitar troca'),
+        el('div',{class:'sub'}, (d.tipo==='epi'?'🦺 EPI: ':'🧰 Ferramenta: ')+d.item),
+        d.erro ? el('div',{class:'error-box'}, d.erro) : null,
+        el('div',{class:'field'}, el('label',{},'Motivo'), selectEl(d.motivo, ['Danificado','Perda'], v=>{ d.motivo=v; d.erro=''; render(); })),
+        d.motivo==='Danificado' ? el('div',{class:'field'}, el('label',{},'Foto do item danificado (obrigatória)'),
+          el('input',{type:'file', accept:'image/*', onchange: async (e)=>{
+            const f = e.target.files[0]; if(!f) return;
+            try{ d.foto = await fotoParaBase64(f); d.erro=''; }catch(err){ d.erro='Não foi possível ler a imagem.'; }
+            render();
+          }}),
+          d.foto ? el('img',{src:d.foto.preview, style:'margin-top:8px; max-width:100%; max-height:200px; border-radius:8px; border:1px solid var(--border);'}) : null
+        ) : null,
+        el('div',{class:'field'}, el('label',{}, d.motivo==='Perda' ? 'Informe como/onde foi a perda (obrigatório)' : 'Descrição do dano (opcional)'),
+          el('textarea',{oninput:(e)=>d.descricao=e.target.value}, d.descricao)),
+        el('div',{class:'modal-actions'},
+          el('button',{class:'btn ghost', onclick:()=>{ modal=null; render(); }}, 'Cancelar'),
+          el('button',{class:'btn', disabled:d.busy, onclick: async ()=>{
+            d.erro='';
+            if(d.motivo==='Danificado' && !d.foto){ d.erro='Anexe a foto do item danificado.'; render(); return; }
+            if(d.motivo==='Perda' && (d.descricao||'').trim().length<5){ d.erro='Informe os detalhes da perda.'; render(); return; }
+            d.busy=true; render();
+            try{
+              await api('/api/tecnicos?id='+currentUser.tecnicoId, {method:'PATCH', body:JSON.stringify({
+                action:'solicitar_troca', tipo:d.tipo, item:d.item, motivo:d.motivo, descricao:d.descricao,
+                filename: d.foto?d.foto.nome:'', mimeType: d.foto?d.foto.tipo:'', dataBase64: d.foto?d.foto.dataBase64:''})});
+              await loadData(); modal=null; render();
+            }catch(e){ d.busy=false; d.erro=e.error||'Erro ao enviar solicitação.'; render(); }
+          }}, d.busy?'Enviando…':'Enviar solicitação')
+        )
+      );
+      overlay.appendChild(box); return overlay;
+    }
+    if(modal.mode==='trocas'){
+      const tec = tecById(modal.data.tecnicoId);
+      const lista = (tec.solicitacoes||[]).slice().sort((a,b)=> a.em<b.em?1:-1).slice(0,15);
+      const box = el('div',{class:'modal'},
+        el('h2',{}, '🔧 Solicitações de troca'), el('div',{class:'sub'}, tec.nome)
+      );
+      lista.forEach(x=>{
+        box.appendChild(el('div',{class:'card', style:'margin-bottom:8px;'},
+          el('div',{class:'card-top'},
+            el('div',{}, el('div',{class:'card-title', style:'font-size:13px;'}, (x.tipo==='epi'?'🦺 ':'🧰 ')+x.item),
+              el('div',{class:'card-sub'}, x.motivo+' · '+new Date(x.em).toLocaleString('pt-BR'))),
+            el('span',{class:'tipo-tag '+(x.status==='Atendida'?'tag-Manutenção':'tag-Outro')}, x.status)),
+          x.descricao ? el('div',{class:'card-sub', style:'margin-top:6px;'}, x.descricao) : null,
+          x.fotoUrl ? el('a',{href:x.fotoUrl, target:'_blank', rel:'noopener'},
+            el('img',{src:x.fotoUrl, style:'margin-top:8px; width:100%; max-height:220px; object-fit:cover; border-radius:8px; border:1px solid var(--border);'})) : null,
+          x.status==='Pendente' ? el('div',{style:'margin-top:10px;'},
+            el('button',{class:'btn small', onclick: async ()=>{
+              try{ await api('/api/tecnicos?id='+tec.id, {method:'PATCH', body:JSON.stringify({action:'atender_troca', id:x.id})}); await loadData(); modal={mode:'trocas', data:{tecnicoId:tec.id}}; render(); }
+              catch(e){ alert(e.error||'Erro ao atualizar.'); }
+            }}, '✓ Marcar como atendida')) : null
+        ));
+      });
+      if(lista.length===0) box.appendChild(el('div',{class:'sub'}, 'Nenhuma solicitação.'));
+      box.appendChild(el('div',{class:'modal-actions'}, el('button',{class:'btn ghost', onclick:()=>{ modal=null; render(); }}, 'Fechar')));
       overlay.appendChild(box); return overlay;
     }
     if(modal.mode==='minha-senha'){

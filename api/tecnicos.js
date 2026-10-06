@@ -26,7 +26,10 @@ export default async function handler(req, res) {
     const user = await getUserFromReq(req);
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
     const isPlan = user.papel === 'planejador';
-    if (!['admin','editor','supervisor'].includes(user.papel) && !(isPlan && req.method === 'PATCH')) return res.status(403).json({ error: 'Sem permissão.' });
+    const isTec = user.papel === 'tecnico';
+    if (isTec) {
+      if (req.method !== 'PATCH' || (req.body || {}).action !== 'solicitar_troca' || req.query.id !== user.tecnicoId) return res.status(403).json({ error: 'Sem permissão.' });
+    } else if (!['admin','editor','supervisor'].includes(user.papel) && !(isPlan && req.method === 'PATCH')) return res.status(403).json({ error: 'Sem permissão.' });
 
     if (req.method === 'POST') {
       const { nome, cargo, local, tipo, feriasLimite, admissao } = req.body || {};
@@ -58,6 +61,45 @@ export default async function handler(req, res) {
       const idx = tecnicos.findIndex(t => t.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Técnico não encontrado.' });
       const body = req.body || {};
+
+      if (body.action === 'solicitar_troca') {
+        if (!isTec) return res.status(403).json({ error: 'Sem permissão.' });
+        const t = tecnicos[idx];
+        const { tipo, item, motivo, descricao, filename, mimeType, dataBase64 } = body;
+        if (!['ferramenta', 'epi'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido.' });
+        if (!['Danificado', 'Perda'].includes(motivo)) return res.status(400).json({ error: 'Motivo inválido.' });
+        const lista = String((tipo === 'epi' ? t.epi : t.ferramentas) || '').split('\n').map(x => x.trim()).filter(Boolean);
+        if (!item || !lista.includes(item)) return res.status(400).json({ error: 'Item não está na sua lista.' });
+        t.solicitacoes = t.solicitacoes || [];
+        if (t.solicitacoes.some(x => x.status === 'Pendente' && x.tipo === tipo && x.item === item)) return res.status(400).json({ error: 'Já existe uma solicitação pendente para este item.' });
+        const desc = String(descricao || '').trim().slice(0, 500);
+        let fotoUrl = '', fotoNome = '';
+        if (motivo === 'Perda') {
+          if (desc.length < 5) return res.status(400).json({ error: 'Informe os detalhes da perda.' });
+        } else {
+          if (!dataBase64 || !filename || !String(mimeType || '').startsWith('image/')) return res.status(400).json({ error: 'A foto do item danificado é obrigatória.' });
+          if (!process.env.BLOB_READ_WRITE_TOKEN) return res.status(500).json({ error: 'Armazenamento de arquivos ainda não conectado a este projeto (Vercel: Storage → Blob).' });
+          const buffer = Buffer.from(dataBase64, 'base64');
+          if (buffer.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'Foto muito grande.' });
+          const { put } = await import('@vercel/blob');
+          const safeName = String(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+          const blob = await put(`trocas/${id}/${Date.now()}-${safeName}`, buffer, { access: 'public', contentType: mimeType });
+          fotoUrl = blob.url; fotoNome = filename;
+        }
+        const sol = { id: crypto.randomUUID(), tipo, item, motivo, descricao: desc, fotoUrl, fotoNome, em: new Date().toISOString(), por: user.email, status: 'Pendente' };
+        t.solicitacoes.push(sol);
+        await setJSON('tecnicos', tecnicos);
+        return res.status(200).json({ solicitacao: sol });
+      }
+
+      if (body.action === 'atender_troca') {
+        const sol = (tecnicos[idx].solicitacoes || []).find(x => x.id === body.id);
+        if (!sol) return res.status(404).json({ error: 'Solicitação não encontrada.' });
+        sol.status = 'Atendida'; sol.atendidaEm = new Date().toISOString(); sol.atendidaPor = user.email;
+        await setJSON('tecnicos', tecnicos);
+        return res.status(200).json({ ok: true });
+      }
+
       const { feriasLimite, admissao, feriasAjuste, feriasPref, feriasFora } = body;
       const { nome, cargo, local, tipo, carro, ferramentas, material, epi } = isPlan ? {} : body;
       if (carro !== undefined) tecnicos[idx].carro = String(carro).trim().slice(0, 120);

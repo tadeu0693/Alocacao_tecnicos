@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       }));
       const pids = new Set(mine.map(a => a.projetoId).filter(Boolean));
       return res.status(200).json({
-        tecnicos: tecnicos.filter(t => t.id === user.tecnicoId),
+        tecnicos: tecnicos.filter(t => t.id === user.tecnicoId).map(({ carro, material, ...resto }) => resto),
         projetos: projetos.filter(p => pids.has(p.id)),
         allocations: mine
       });
