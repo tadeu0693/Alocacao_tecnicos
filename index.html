@@ -1007,7 +1007,8 @@
       const extras = [
         t.carro ? ('🚗 '+t.carro) : null,
         t.ferramentas ? '🧰 ferramentas' : null,
-        t.material ? '📦 material' : null
+        t.material ? '📦 material' : null,
+        t.epi ? '🦺 EPI' : null
       ].filter(Boolean).join(' · ');
       list.appendChild(el('div',{class:'manage-item'},
         el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, t.cargo+' · '+t.local+' · '+t.tipo),
@@ -1024,6 +1025,7 @@
             tecBtn('carro','🚗 Carro'),
             tecBtn('ferramentas','🧰 Ferramentas'),
             tecBtn('material','📦 Material'),
+            tecBtn('epi','🦺 EPI'),
             el('button',{class:'btn ghost small', onclick:()=>{ editingTecnicoId=t.id; editTecnicoDraft={nome:t.nome, cargo:t.cargo, local:t.local, tipo:t.tipo}; render(); }}, 'Editar'),
             el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'tecnico', id:t.id}; render(); }}, 'Excluir')
           ]
@@ -1864,6 +1866,7 @@
       const cfg = {
         carro:{titulo:'🚗 Carro vinculado', sub:'Informe modelo/placa. Deixe vazio se não há carro vinculado.', ph:'Ex: Fiorino ABC-1D23', multi:false},
         ferramentas:{titulo:'🧰 Ferramentas disponíveis', sub:'Liste as ferramentas que o técnico tem consigo (uma por linha).', ph:'Furadeira\nMultímetro\nNotebook', multi:true},
+        epi:{titulo:'🦺 EPI', sub:'Liste os EPIs do técnico (uma por linha).', ph:'Capacete\nBota\nLuvas', multi:true},
         material:{titulo:'📦 Material no carro', sub:'Liste o material que está no carro (uma por linha).', ph:'Cabo UTP 100m\nConectores RJ45', multi:true}
       }[d.kind];
       const input = cfg.multi
