@@ -1859,6 +1859,34 @@
     return wrap;
   }
 
+  const CATALOGO = {
+    ferramentas: ["PARAFUSADEIRA", "MARTELETE DEWALT", "ESMIRILHADEIRA DEWALT", "SOPRADOR COM ACESSÓRIOS", "KIT PONTEIRAS 10 PEÇAS", "JOGO DE SOQUETE 9 PEÇAS", "LANTERNA DE CABEÇA", "LANTERNA", "ALICATE UNIVERSAL", "ALICATE DE BICO", "ALICATE DE CORTE", "ALICATE DE CORTE DESCASCADOR", "DECAPADOR DE CABO", "ALICATE DE CRIMPAR RJ 45", "ALICATE DE PRESSÃO", "TRENA", "MARTELO", "KIT BROCA VIDEA", "KIT BROCA AÇO", "KIT BROCA ESCALONADA", "KIT CHAVE TORX", "KIT CHAVE PRECISÃO", "JOGO CATRACA 40 PEÇAS", "KIT CHAVE ISOLADA 3 PEÇAS", "CHAVE FENDA", "CHAVE PHILIPS", "BOLSA PARA FERRAMENTAS", "CINTO DE FERRAMENTAS", "ARCO DE SERRA", "ESQUADRO", "NIVEL BOLHA", "LIMA", "ESTILETE", "MULTIMETRO", "KIT PINCEL 3 PEÇAS", "FERRO DE SOLDA", "ESTANHO", "CADEADO PARA ESCADA", "KIT SERRA COPO", "CORTADOR DE TUBO PVC", "CATRACA PARA ESCADA", "BATERIAS 21V 4.0AH", "BATERIAS 21V 2.0AH", "PONTEIRO ROMPEDOR SDS", "TALHADEIRA ROMPEDOR SDS"],
+    epi: ["CAMISA NR 10", "CALÇA NR 10", "CARNEIRA PARA CAPACETE", "PROT. OURICULAR TIPO CONCHA", "CAPACETE", "JUGULAR", "LUVA", "OCULOS", "PERNEIRA", "BOTA", "PROTETOR SOLAR", "CINTO"]
+  };
+  function listaPicker(d){
+    const cat = CATALOGO[d.kind];
+    if(!d.items) d.items = String(d.valor||'').split('\n').map(x=>x.trim()).filter(Boolean);
+    const sync = ()=>{ d.valor = d.items.join('\n'); };
+    const add = (v)=>{ v = (v||'').trim(); if(!v || d.items.includes(v)) return; d.items.push(v); sync(); };
+    const disponiveis = cat.filter(x=>!d.items.includes(x));
+    const wrap = el('div',{});
+    if(d.items.length===0) wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:8px;'}, 'Nenhum item.'));
+    d.items.forEach((it,i)=>{
+      wrap.appendChild(el('div',{style:'display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-soft); font-size:12px;'},
+        el('span',{}, it),
+        el('button',{class:'btn ghost small', style:'padding:2px 6px; font-size:10px;', onclick:()=>{ d.items.splice(i,1); sync(); render(); }}, 'Remover')));
+    });
+    const sel = el('select',{style:'flex:1; min-width:0;', onchange:(e)=>d.sel=e.target.value},
+      el('option',{value:''}, '— selecionar da lista —'),
+      ...disponiveis.map(o=> el('option',{value:o, ...((o===d.sel)?{selected:'selected'}:{})}, o)));
+    wrap.appendChild(el('div',{style:'display:flex; gap:6px; margin-top:10px;'}, sel,
+      el('button',{class:'btn small', onclick:()=>{ add(d.sel); d.sel=''; render(); }}, '+ Adicionar')));
+    wrap.appendChild(el('div',{style:'display:flex; gap:6px; margin-top:8px;'},
+      el('input',{type:'text', placeholder:'Outro item (fora da lista)', value:d.outro||'', style:'flex:1; min-width:0;', oninput:(e)=>d.outro=e.target.value}),
+      el('button',{class:'btn ghost small', onclick:()=>{ add(d.outro); d.outro=''; render(); }}, '+ Outro')));
+    return wrap;
+  }
+
   function renderModal(){
     const overlay = el('div',{class:'overlay', onclick:(e)=>{ if(e.target===e.currentTarget){ modal=null; novaHoraExtra=null; novaDespesa=null; render(); } }});
     if(modal.mode==='tecnico-info'){
@@ -1869,7 +1897,7 @@
         epi:{titulo:'🦺 EPI', sub:'Liste os EPIs do técnico (uma por linha).', ph:'Capacete\nBota\nLuvas', multi:true},
         material:{titulo:'📦 Material no carro', sub:'Liste o material que está no carro (uma por linha).', ph:'Cabo UTP 100m\nConectores RJ45', multi:true}
       }[d.kind];
-      const input = cfg.multi
+      const input = CATALOGO[d.kind] ? listaPicker(d) : cfg.multi
         ? el('textarea',{placeholder:cfg.ph, style:'min-height:140px;', oninput:(e)=>d.valor=e.target.value}, d.valor)
         : el('input',{type:'text', value:d.valor, placeholder:cfg.ph, oninput:(e)=>d.valor=e.target.value});
       const box = el('div',{class:'modal'},
