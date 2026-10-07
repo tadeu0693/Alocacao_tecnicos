@@ -162,12 +162,36 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      if (action === 'corrigir_ferias') {
+        if (!isOwner || !alloc.ferias || alloc.statusFerias !== 'Reprovado') return res.status(403).json({ error: 'Sem permissão.' });
+        const { inicio, fim } = req.body || {};
+        const ISO = /^\d{4}-\d{2}-\d{2}$/;
+        if (!ISO.test(String(inicio || '')) || !ISO.test(String(fim || '')) || fim < inicio) return res.status(400).json({ error: 'Datas inválidas.' });
+        if (allocations.some(o => o.ferias && o.tecnicoId !== alloc.tecnicoId && inicio <= o.fim && o.inicio <= fim)) return res.status(409).json({ error: 'Data não disponível: já existe outra pessoa de férias nesse período.' });
+        alloc.motivoAnterior = alloc.motivoReprovacao || '';
+        alloc.motivoReprovacao = '';
+        alloc.inicio = inicio; alloc.fim = fim;
+        alloc.statusFerias = 'Solicitado';
+        alloc.corrigidaEm = new Date().toISOString();
+        allocations[idx] = alloc;
+        await setJSON('allocations', allocations);
+        return res.status(200).json({ allocation: alloc });
+      }
+
       if (action === 'edit_ferias') {
         if (!canManage) return res.status(403).json({ error: 'Sem permissão.' });
         const { inicio, fim, statusFerias, notas: notaF, diasVendidos: dv } = req.body || {};
         if (inicio !== undefined) alloc.inicio = inicio;
         if (fim !== undefined) alloc.fim = fim;
-        if (statusFerias !== undefined) alloc.statusFerias = statusFerias;
+        if (statusFerias !== undefined) {
+          if (statusFerias === 'Reprovado') {
+            const m = String((req.body || {}).motivoReprovacao || '').trim().slice(0, 500);
+            if (m.length < 3) return res.status(400).json({ error: 'Informe o motivo da reprovação.' });
+            alloc.motivoReprovacao = m; alloc.reprovadaEm = new Date().toISOString(); alloc.corrigidaEm = null;
+          } else if (alloc.statusFerias === 'Reprovado') { alloc.motivoReprovacao = ''; }
+          if (statusFerias === 'Aprovado') alloc.corrigidaEm = null;
+          alloc.statusFerias = statusFerias;
+        }
         if (notaF !== undefined) alloc.notas = notaF;
         if (dv !== undefined) alloc.diasVendidos = Math.max(0, Math.min(10, parseInt(dv, 10) || 0));
         allocations[idx] = alloc;
