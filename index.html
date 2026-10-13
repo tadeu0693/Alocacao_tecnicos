@@ -1805,6 +1805,9 @@
       });
     });
     const nEmergencias = rows.filter(r=>r.a.emergencial).length;
+    let totalOutros = 0;
+    rows.forEach(r=>{ totalOutros += extrasNoPeriodo(r.a,pStart,pEnd).outro; });
+    const diario = linhasDiarias(rows, pStart, pEnd);
 
     wrap.appendChild(el('div',{class:'report-grid'},
       el('div',{class:'report-card'}, el('div',{class:'num'}, rows.length), el('div',{class:'lbl'}, 'Alocações no período')),
@@ -1814,8 +1817,10 @@
       el('div',{class:'report-card'}, el('div',{class:'num'}, porTipo['Indisponibilidade']), el('div',{class:'lbl'}, 'Dias indisponível')),
       el('div',{class:'report-card'}, el('div',{class:'num'}, totalHorasExtras.toFixed(1).replace(/\.0$/,'')), el('div',{class:'lbl'}, 'Horas extras no período')),
       el('div',{class:'report-card'}, el('div',{class:'num'}, nEmergencias), el('div',{class:'lbl'}, '🚨 Alocações de emergência')),
-      el('div',{class:'report-card'}, el('div',{class:'num'}, 'R$ '+totalHotel.toFixed(2).replace('.',',')), el('div',{class:'lbl'}, '🏨 Hotel no período')),
-      el('div',{class:'report-card'}, el('div',{class:'num'}, 'R$ '+totalRefeicao.toFixed(2).replace('.',',')), el('div',{class:'lbl'}, '🍽️ Refeição no período'))
+      el('div',{class:'report-card'}, el('div',{class:'num'}, fmtBRL(totalHotel)), el('div',{class:'lbl'}, '🏨 Hotel no período')),
+      el('div',{class:'report-card'}, el('div',{class:'num'}, fmtBRL(totalRefeicao)), el('div',{class:'lbl'}, '🍽️ Refeição no período')),
+      el('div',{class:'report-card'}, el('div',{class:'num'}, fmtBRL(totalOutros)), el('div',{class:'lbl'}, '💵 Outras despesas')),
+      el('div',{class:'report-card'}, el('div',{class:'num'}, fmtBRL(totalHotel+totalRefeicao+totalOutros)), el('div',{class:'lbl'}, '💰 Total de despesas'))
     ));
 
     wrap.appendChild(el('div',{style:'display:flex; gap:8px; margin-bottom:12px;'},
@@ -1823,54 +1828,163 @@
       el('button',{class:'btn small ghost', onclick:()=>exportExcel(rows,pStart,pEnd,reportMode)}, '⬇ Exportar Excel')
     ));
 
+    wrap.appendChild(el('div',{class:'section-title'}, 'Resumo por alocação'));
     const table = el('table',{class:'report-table'},
       el('thead',{}, el('tr',{},
         el('th',{},'Técnico'), el('th',{},'Tipo'), el('th',{},'Obra / Motivo'), el('th',{},'Local'),
-        el('th',{},'Início'), el('th',{},'Fim'), el('th',{},'Dias no período')
+        el('th',{},'Início'), el('th',{},'Fim'), el('th',{},'Horário'), el('th',{},'Dias'),
+        el('th',{},'H. extra'), el('th',{},'Hotel'), el('th',{},'Refeição'), el('th',{},'Outros')
       )),
-      el('tbody',{}, rows.map(r=> el('tr',{},
-        el('td',{}, tecById(r.a.tecnicoId).nome),
-        el('td',{}, r.a.tipo+(r.a.emergencial?' 🚨':'')),
-        el('td',{}, r.a.obra||'—'),
-        el('td',{}, r.a.local||'—'),
-        el('td',{}, fmtShort(fromISO(r.a.inicio))),
-        el('td',{}, fmtShort(fromISO(r.a.fim))),
-        el('td',{}, r.dias)
-      )))
+      el('tbody',{}, rows.map(r=>{
+        const x = extrasNoPeriodo(r.a,pStart,pEnd);
+        return el('tr',{},
+          el('td',{}, tecById(r.a.tecnicoId).nome),
+          el('td',{}, r.a.tipo+(r.a.emergencial?' 🚨':'')),
+          el('td',{}, r.a.obra||'—'),
+          el('td',{}, r.a.local||'—'),
+          el('td',{}, fmtShort(fromISO(r.a.inicio))),
+          el('td',{}, fmtShort(fromISO(r.a.fim))),
+          el('td',{}, horarioDe(r.a)),
+          el('td',{}, r.dias),
+          el('td',{}, fmtHoras(x.he)),
+          el('td',{}, x.hotel?fmtBRL(x.hotel):'—'),
+          el('td',{}, x.refeicao?fmtBRL(x.refeicao):'—'),
+          el('td',{}, x.outro?fmtBRL(x.outro):'—')
+        );
+      }))
     );
     wrap.appendChild(el('div',{class:'table-wrap'}, table));
     if(rows.length===0) wrap.appendChild(el('div',{class:'empty'}, 'Nenhuma alocação neste período.'));
+
+    wrap.appendChild(el('div',{class:'section-title'}, 'Detalhamento diário (horário no local, hora extra e despesas)'));
+    const tDia = el('table',{class:'report-table'},
+      el('thead',{}, el('tr',{},
+        el('th',{},'Data'), el('th',{},'Técnico'), el('th',{},'Obra'), el('th',{},'Local'), el('th',{},'Horário no local'),
+        el('th',{},'H. extra'), el('th',{},'Hotel'), el('th',{},'Refeição'), el('th',{},'Outros'), el('th',{},'Observações')
+      )),
+      el('tbody',{}, diario.map(l=> el('tr',{},
+        el('td',{}, DOW[fromISO(l.data).getDay()]+' '+fmtShort(fromISO(l.data))),
+        el('td',{}, l.tecnico), el('td',{}, l.obra||'—'), el('td',{}, l.local||'—'), el('td',{}, l.horario),
+        el('td',{}, fmtHoras(l.he)),
+        el('td',{}, l.hotel?fmtBRL(l.hotel):'—'),
+        el('td',{}, l.refeicao?fmtBRL(l.refeicao):'—'),
+        el('td',{}, l.outro?fmtBRL(l.outro):'—'),
+        el('td',{}, l.obs||'')
+      )))
+    );
+    wrap.appendChild(el('div',{class:'table-wrap'}, tDia));
+    if(diario.length===0) wrap.appendChild(el('div',{class:'empty'}, 'Nenhum dia de trabalho neste período.'));
     return wrap;
+  }
+
+  /* ---- helpers do relatório ---- */
+  function fmtBRL(v){ return 'R$ '+(v||0).toFixed(2).replace('.',','); }
+  function fmtNum(v){ return (Math.round((v||0)*100)/100).toFixed(2).replace('.',','); }
+  function fmtHoras(h){ return h ? (String(Math.round(h*100)/100).replace('.',',')+'h') : '—'; }
+  function horarioDe(a){ return (a.horaInicio&&a.horaFim) ? (a.horaInicio+'–'+a.horaFim) : 'Dia inteiro'; }
+  function isoLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function noPeriodo(iso, pStart, pEnd){ if(!iso) return false; const d=fromISO(iso); return d>=pStart && d<=pEnd; }
+  function extrasNoPeriodo(a, pStart, pEnd){
+    const r = {he:0, hotel:0, refeicao:0, outro:0};
+    (a.horasExtras||[]).forEach(h=>{ if(noPeriodo(h.data,pStart,pEnd)) r.he += Number(h.horas)||0; });
+    (a.despesas||[]).forEach(d=>{
+      if(!noPeriodo(d.data,pStart,pEnd)) return;
+      const v = Number(d.valor)||0;
+      if(d.tipo==='Hotel') r.hotel += v; else if(d.tipo==='Refeição') r.refeicao += v; else r.outro += v;
+    });
+    return r;
+  }
+  // Uma linha por técnico/alocação/dia no período: horário no local + hora extra e despesas do dia.
+  // Fins de semana só aparecem se tiverem lançamento (ou se a alocação for só no FDS).
+  function linhasDiarias(rows, pStart, pEnd){
+    const out = [];
+    rows.forEach(({a})=>{
+      if(a.tipo==='Indisponibilidade') return;
+      const s = fromISO(a.inicio) < pStart ? pStart : fromISO(a.inicio);
+      const e = fromISO(a.fim) > pEnd ? pEnd : fromISO(a.fim);
+      const soFDS = (()=>{ for(let d=new Date(s); d<=e; d=addDays(d,1)) if(d.getDay()%6!==0) return false; return true; })();
+      for(let d=new Date(s); d<=e; d=addDays(d,1)){
+        const iso = isoLocal(d);
+        const hes = (a.horasExtras||[]).filter(h=>h.data===iso);
+        const des = (a.despesas||[]).filter(x=>x.data===iso);
+        const fds = d.getDay()===0 || d.getDay()===6;
+        if(fds && !soFDS && hes.length===0 && des.length===0) continue;
+        const l = {data:iso, tecnico:tecById(a.tecnicoId).nome, obra:a.obra||'', local:a.local||'', horario:horarioDe(a), he:0, hotel:0, refeicao:0, outro:0, obs:''};
+        const obs = [];
+        hes.forEach(h=>{ l.he += Number(h.horas)||0; if(h.notas) obs.push('HE: '+h.notas); });
+        des.forEach(x=>{
+          const v = Number(x.valor)||0;
+          if(x.tipo==='Hotel') l.hotel += v; else if(x.tipo==='Refeição') l.refeicao += v; else l.outro += v;
+          if(x.notas) obs.push(x.tipo+': '+x.notas);
+        });
+        l.obs = obs.join(' | ');
+        out.push(l);
+      }
+    });
+    return out.sort((x,y)=> x.data<y.data?-1 : x.data>y.data?1 : x.tecnico.localeCompare(y.tecnico));
   }
 
   function exportExcel(rows, pStart, pEnd, mode){
     if(typeof XLSX === 'undefined'){ alert('Biblioteca de Excel ainda carregando, tente novamente em instantes.'); return; }
-    const data = rows.map(r=>({
-      'Técnico': tecById(r.a.tecnicoId).nome,
-      'Tipo': r.a.tipo,
-      'Obra/Motivo': r.a.obra||'',
-      'Local': r.a.local||'',
-      'Início': r.a.inicio,
-      'Fim': r.a.fim,
-      'Dias no período': r.dias
+    const r2 = v=> Math.round((v||0)*100)/100;
+    const resumo = rows.map(r=>{
+      const x = extrasNoPeriodo(r.a,pStart,pEnd);
+      return {
+        'Técnico': tecById(r.a.tecnicoId).nome,
+        'Tipo': r.a.tipo+(r.a.emergencial?' (emergência)':''),
+        'Obra/Motivo': r.a.obra||'',
+        'Local': r.a.local||'',
+        'Início': fmtLong(fromISO(r.a.inicio)),
+        'Fim': fmtLong(fromISO(r.a.fim)),
+        'Horário': horarioDe(r.a),
+        'Dias no período': r.dias,
+        'Horas extras': r2(x.he),
+        'Hotel (R$)': r2(x.hotel),
+        'Refeição (R$)': r2(x.refeicao),
+        'Outros (R$)': r2(x.outro),
+        'Total despesas (R$)': r2(x.hotel+x.refeicao+x.outro)
+      };
+    });
+    const diario = linhasDiarias(rows,pStart,pEnd).map(l=>({
+      'Data': fmtLong(fromISO(l.data)),
+      'Dia': DOW[fromISO(l.data).getDay()],
+      'Técnico': l.tecnico,
+      'Obra': l.obra,
+      'Local': l.local,
+      'Horário no local': l.horario,
+      'Horas extras': r2(l.he),
+      'Hotel (R$)': r2(l.hotel),
+      'Refeição (R$)': r2(l.refeicao),
+      'Outros (R$)': r2(l.outro),
+      'Observações': l.obs
     }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws['!cols'] = [{wch:28},{wch:16},{wch:26},{wch:20},{wch:12},{wch:12},{wch:14}];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Relatório');
+    const ws1 = XLSX.utils.json_to_sheet(resumo);
+    ws1['!cols'] = [{wch:28},{wch:18},{wch:26},{wch:20},{wch:12},{wch:12},{wch:13},{wch:10},{wch:12},{wch:12},{wch:13},{wch:12},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
+    const ws2 = XLSX.utils.json_to_sheet(diario.length ? diario : [{'Data':'Sem dias de trabalho no período'}]);
+    ws2['!cols'] = [{wch:12},{wch:6},{wch:28},{wch:24},{wch:20},{wch:15},{wch:12},{wch:12},{wch:13},{wch:12},{wch:40}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Diário');
     XLSX.writeFile(wb, 'relatorio-'+mode+'-'+toISO(pStart)+'-a-'+toISO(pEnd)+'.xlsx');
   }
 
   function exportCSV(rows, pStart, pEnd, mode){
-    const header = ["Técnico","Tipo","Obra/Motivo","Local","Início","Fim","Dias no período"];
-    const csvRows = [header.join(';')];
+    const q = v=> '"'+String(v).replace(/"/g,'""')+'"';
+    const csvRows = ['RESUMO POR ALOCAÇÃO'];
+    csvRows.push(["Técnico","Tipo","Obra/Motivo","Local","Início","Fim","Horário","Dias no período","Horas extras","Hotel (R$)","Refeição (R$)","Outros (R$)","Total despesas (R$)"].join(';'));
     rows.forEach(r=>{
-      const a = r.a;
-      const line = [tecById(a.tecnicoId).nome, a.tipo, a.obra||'', a.local||'', a.inicio, a.fim, r.dias]
-        .map(v=> '"'+String(v).replace(/"/g,'""')+'"').join(';');
-      csvRows.push(line);
+      const a = r.a, x = extrasNoPeriodo(a,pStart,pEnd);
+      csvRows.push([tecById(a.tecnicoId).nome, a.tipo+(a.emergencial?' (emergência)':''), a.obra||'', a.local||'', fmtLong(fromISO(a.inicio)), fmtLong(fromISO(a.fim)), horarioDe(a), r.dias,
+        fmtNum(x.he), fmtNum(x.hotel), fmtNum(x.refeicao), fmtNum(x.outro), fmtNum(x.hotel+x.refeicao+x.outro)].map(q).join(';'));
     });
-    const csv = "\uFEFF" + csvRows.join('\n');
+    csvRows.push('');
+    csvRows.push('DETALHAMENTO DIÁRIO');
+    csvRows.push(["Data","Dia","Técnico","Obra","Local","Horário no local","Horas extras","Hotel (R$)","Refeição (R$)","Outros (R$)","Observações"].join(';'));
+    linhasDiarias(rows,pStart,pEnd).forEach(l=>{
+      csvRows.push([fmtLong(fromISO(l.data)), DOW[fromISO(l.data).getDay()], l.tecnico, l.obra, l.local, l.horario,
+        fmtNum(l.he), fmtNum(l.hotel), fmtNum(l.refeicao), fmtNum(l.outro), l.obs].map(q).join(';'));
+    });
+    const csv = "﻿" + csvRows.join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
