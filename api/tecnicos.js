@@ -64,7 +64,8 @@ export default async function handler(req, res) {
 
       if (body.action === 'ferias_pref') {
         if (!isTec) return res.status(403).json({ error: 'Sem permissão.' });
-        const nova = cleanPref(body.feriasPref);
+        const removidas = (tecnicos[idx].feriasPrefRemovidas || []).map(r => r.id);
+        const nova = cleanPref(body.feriasPref).filter(p => !removidas.includes(p.id)); // não deixa tela desatualizada recriar o que a gestão removeu
         const atuais = (tecnicos[idx].feriasPref || []).map(p => p.id);
         const allocs = await getJSON('allocations', []);
         const outras = allocs.filter(a => a.ferias && a.tecnicoId !== id);
@@ -120,7 +121,17 @@ export default async function handler(req, res) {
       if (feriasLimite !== undefined) tecnicos[idx].feriasLimite = feriasLimite;
       if (admissao !== undefined) tecnicos[idx].admissao = cleanAdmissao(admissao);
       if (feriasAjuste !== undefined) tecnicos[idx].feriasAjuste = cleanAjuste(feriasAjuste);
-      if (feriasPref !== undefined) tecnicos[idx].feriasPref = cleanPref(feriasPref);
+      if (feriasPref !== undefined) {
+        const nova = cleanPref(feriasPref);
+        const ids = nova.map(p => p.id);
+        const tiradas = (tecnicos[idx].feriasPref || []).filter(p => !ids.includes(p.id));
+        if (tiradas.length) {
+          const agora = new Date().toISOString();
+          tecnicos[idx].feriasPrefRemovidas = tiradas.map(p => ({ id: p.id, inicio: p.inicio, fim: p.fim, em: agora, por: user.email, programado: !!body.programadoId && p.id === body.programadoId }))
+            .concat(tecnicos[idx].feriasPrefRemovidas || []).slice(0, 20);
+        }
+        tecnicos[idx].feriasPref = nova;
+      }
       if (feriasFora !== undefined) tecnicos[idx].feriasFora = cleanFora(feriasFora);
       await setJSON('tecnicos', tecnicos);
       return res.status(200).json({ tecnico: tecnicos[idx] });

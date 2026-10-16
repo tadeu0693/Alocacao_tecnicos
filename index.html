@@ -754,6 +754,9 @@
       catch(e){ alert(e.error||'Erro ao salvar.'); }
     };
     const lista = me.feriasPref||[];
+    const limRem = addDays(startOfDay(new Date()), -30);
+    (me.feriasPrefRemovidas||[]).filter(x=> !x.programado && x.em && new Date(x.em)>=limRem).slice(0,3).forEach(x=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px; color:#d64545;'},
+      '✕ Solicitação removida pela gestão · '+fmtLong(fromISO(x.inicio))+' a '+fmtLong(fromISO(x.fim))+' — solicite novas datas abaixo.')));
     lista.forEach(p=> box.appendChild(el('div',{class:'card-sub', style:'margin-top:4px; color:var(--amber); display:flex; gap:8px; align-items:center;'},
       el('span',{}, 'Solicitada (aguardando aprovação) · '+fmtLong(fromISO(p.inicio))+' a '+fmtLong(fromISO(p.fim))+(p.notas?(' · '+p.notas):'')),
       el('button',{class:'btn ghost small', style:'padding:0 6px;', title:'Cancelar solicitação', onclick:()=>savePref(lista.filter(x=>x.id!==p.id))}, '×'))));
@@ -1305,7 +1308,7 @@
       await api('/api/allocations', {method:'POST', body:JSON.stringify({tecnicoId:novo.tecnicoId, tipo:'Indisponibilidade', obra:'Férias', local:'—', inicio:novo.inicio, fim:novo.fim, notas:novo.notas||'', ferias:true, statusFerias:novo.statusFerias, diasVendidos:novo.diasVendidos||0})});
       if(novo.prefId){
         const t = tecById(novo.tecnicoId);
-        await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasPref:(t.feriasPref||[]).filter(p=>p.id!==novo.prefId)})});
+        await api('/api/tecnicos?id='+t.id, {method:'PATCH', body:JSON.stringify({feriasPref:(t.feriasPref||[]).filter(p=>p.id!==novo.prefId), programadoId:novo.prefId})});
       }
       if(novo===novoFerias) novoFerias = null;
       await loadData(); render();
@@ -1362,7 +1365,7 @@
         podeAlocar ? el('div',{style:'display:flex; gap:4px; margin-top:2px;'},
           el('button',{class:'btn small', style:'padding:2px 8px;', title:'Registra como período programado', onclick:()=>registrarFerias({tecnicoId:t.id, statusFerias:'Agendado', inicio:p.inicio, fim:p.fim, notas:p.notas||'', prefId:p.id})}, 'Programar'),
           el('button',{class:'btn ghost small', style:'padding:2px 8px;', onclick:()=>{ editingPref = {id:p.id, inicio:p.inicio, fim:p.fim, notas:p.notas||''}; render(); }}, 'Editar'),
-          el('button',{class:'btn ghost small', style:'padding:2px 8px;', title:'Remover', onclick:()=>save(list.filter(x=>x.id!==p.id))}, '×')) : null));
+          el('button',{class:'btn ghost small', style:'padding:2px 8px;', title:'Remover solicitação', onclick:()=>{ if(!confirm('Remover a solicitação '+fmtShort(fromISO(p.inicio))+' a '+fmtShort(fromISO(p.fim))+'?\nO técnico verá que foi removida e poderá solicitar de novo.')) return; save(list.filter(x=>x.id!==p.id)); }}, '×')) : null));
     });
     if(podeAlocar){
       box.appendChild(el('div',{style:'display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;'},
@@ -2386,6 +2389,11 @@
   });
 
   boot();
+  document.addEventListener('visibilitychange', async ()=>{
+    if(document.visibilityState!=='visible' || !currentUser || offlineMode || modal) return;
+    const ae = document.activeElement; if(ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
+    try{ await loadData(); render(); }catch(e){}
+  });
 })();
 
 </script>
