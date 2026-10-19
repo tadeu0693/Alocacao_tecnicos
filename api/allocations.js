@@ -8,29 +8,27 @@ function addDaysISO(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
-// Quando uma alocação de emergência é criada num dia específico, "abre espaço" nas
-// alocações já existentes do técnico naquele dia: divide a alocação original em pedaços
-// antes/depois do dia (ou antes/depois do horário, se for só um horário específico),
-// para que o técnico volte ao projeto de origem automaticamente depois da emergência.
-function reallocateForEmergency(allocations, tecnicoId, date, modo, emHoraInicio, emHoraFim, excludeId) {
+// Emergência: abre espaço nas alocações do técnico no período [ini, fim]. A original é
+// dividida em pedaços antes/depois do período (e, se for só um horário num único dia,
+// antes/depois do horário), para o técnico voltar ao projeto de origem depois.
+function reallocateForEmergency(allocations, tecnicoId, ini, fim, modo, emHoraInicio, emHoraFim, excludeId) {
   const others = allocations.filter(a =>
-    a.id !== excludeId && a.tecnicoId === tecnicoId &&
-    a.inicio <= date && date <= a.fim
+    a.id !== excludeId && a.tecnicoId === tecnicoId && !a.emergencial &&
+    a.inicio <= fim && ini <= a.fim
   );
+  const porHorario = modo === 'horario' && ini === fim && emHoraInicio && emHoraFim;
   others.forEach(orig => {
     const pieces = [];
-    if (orig.inicio < date) pieces.push({ ...orig, id: crypto.randomUUID(), fim: addDaysISO(date, -1) });
-    if (orig.fim > date) pieces.push({ ...orig, id: crypto.randomUUID(), inicio: addDaysISO(date, 1) });
-    if (modo === 'horario' && emHoraInicio && emHoraFim) {
+    const base = { ...orig, anexos: orig.anexos || [], horasExtras: orig.horasExtras || [], despesas: orig.despesas || [] };
+    if (orig.inicio < ini) pieces.push({ ...base, id: crypto.randomUUID(), fim: addDaysISO(ini, -1) });
+    if (orig.fim > fim) pieces.push({ ...base, id: crypto.randomUUID(), inicio: addDaysISO(fim, 1), anexos: [], horasExtras: [], despesas: [] });
+    if (porHorario) {
       const dayStart = orig.horaInicio || '08:00';
       const dayEnd = orig.horaFim || '18:00';
-      if (emHoraInicio > dayStart) {
-        pieces.push({ ...orig, id: crypto.randomUUID(), inicio: date, fim: date, horaInicio: dayStart, horaFim: emHoraInicio });
-      }
-      if (emHoraFim < dayEnd) {
-        pieces.push({ ...orig, id: crypto.randomUUID(), inicio: date, fim: date, horaInicio: emHoraFim, horaFim: dayEnd });
-      }
+      if (emHoraInicio > dayStart) pieces.push({ ...base, id: crypto.randomUUID(), inicio: ini, fim: ini, horaInicio: dayStart, horaFim: emHoraInicio, anexos: [], horasExtras: [], despesas: [] });
+      if (emHoraFim < dayEnd) pieces.push({ ...base, id: crypto.randomUUID(), inicio: ini, fim: ini, horaInicio: emHoraFim, horaFim: dayEnd, anexos: [], horasExtras: [], despesas: [] });
     }
+    if (pieces.length) pieces[0] = { ...pieces[0], id: orig.id, anexos: orig.anexos || [], horasExtras: orig.horasExtras || [], despesas: orig.despesas || [] };
     allocations = allocations.filter(a => a.id !== orig.id).concat(pieces);
   });
   return allocations;
@@ -49,8 +47,8 @@ export default async function handler(req, res) {
       let allocations = await getJSON('allocations', []);
       const novo = { id: crypto.randomUUID(), tecnicoId, projetoId: projetoId || null, tipo: tipo || 'Implantação', obra, local: local || '', endereco: endereco || '', latitude: latitude || '', longitude: longitude || '', inicio, fim, horaInicio: horaInicio || '', horaFim: horaFim || '', notas: notas || '', anexos: [], horasExtras: [], despesas: [], emergencial: !!emergencial, ferias: !!ferias, statusFerias: statusFerias || null, diasVendidos: ferias ? Math.max(0, Math.min(10, parseInt(diasVendidos, 10) || 0)) : 0 };
       allocations.push(novo);
-      if (emergencial && inicio === fim) {
-        allocations = reallocateForEmergency(allocations, tecnicoId, inicio, emergencialModo || 'dia', horaInicio, horaFim, novo.id);
+      if (emergencial) {
+        allocations = reallocateForEmergency(allocations, tecnicoId, inicio, fim, emergencialModo || 'dia', horaInicio, horaFim, novo.id);
       }
       await setJSON('allocations', allocations);
       return res.status(200).json({ allocation: novo });

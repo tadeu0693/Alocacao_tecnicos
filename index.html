@@ -2304,7 +2304,8 @@
     const projSel = d.projetoId ? projById(d.projetoId) : null;
     const outOfWindow = !!(projSel && projSel.inicio && projSel.fim && d.inicio && d.fim &&
       (fromISO(d.inicio) < fromISO(projSel.inicio) || fromISO(d.fim) > fromISO(projSel.fim)));
-    const podeEmergencia = d.inicio === d.fim && conflictsFound.length > 0;
+    const podeEmergencia = conflictsFound.length > 0;
+    if(d.emergencial && d.inicio!==d.fim && d.emergencialModo==='horario') d.emergencialModo='dia';
     const box = el('div',{class:'modal'},
       el('h2',{}, 'Nova alocação'), el('div',{class:'sub'}, 'Aloque um técnico a uma obra, manutenção ou indisponibilidade.'),
       conflictsFound.length>0 ? el('div',{class:'warn-box'}, '⚠ Conflito: '+tecById(d.tecnicoId).nome+' já está em "'+conflictsFound[0].obra+'" de '+fmtShort(fromISO(conflictsFound[0].inicio))+' a '+fmtShort(fromISO(conflictsFound[0].fim))+'. '+(podeEmergencia? 'Marque como emergência abaixo para realocar o técnico sem perder o outro compromisso.' : 'Ainda dá para salvar, mas o conflito fica marcado no quadro.')) : null,
@@ -2354,7 +2355,7 @@
         ),
         d.emergencial ? el('div',{},
           el('div',{class:'field'}, el('label',{},'A emergência é:'),
-            selectEl(d.emergencialModo||'dia', [{id:'dia',nome:'Dia inteiro (o técnico volta ao outro projeto no dia seguinte)'},{id:'horario',nome:'Só um horário específico (ele continua no outro projeto no restante do dia)'}], v=>{ d.emergencialModo=v; render(); }, o=>o.nome)),
+            selectEl(d.emergencialModo||'dia', [{id:'dia',nome:'Período inteiro (o técnico volta ao outro projeto no dia seguinte ao fim)'}].concat(d.inicio===d.fim?[{id:'horario',nome:'Só um horário específico (ele continua no outro projeto no restante do dia)'}]:[]), v=>{ d.emergencialModo=v; render(); }, o=>o.nome)),
           d.emergencialModo==='horario' ? el('div',{class:'sub', style:'margin-top:-4px;'}, 'Use os campos "Horário início/fim" acima para definir o horário da emergência.') : null
         ) : null
       ) : null,
@@ -2363,10 +2364,9 @@
         el('button',{class:'btn', disabled: !d.tecnicoId || !d.obra || d.fim<d.inicio || (d.emergencial && d.emergencialModo==='horario' && (!d.horaInicio || !d.horaFim)), onclick: async ()=>{
           try{
             await api('/api/allocations', {method:'POST', body:JSON.stringify(d)});
-            // Cria a mesma alocação (sem o sinalizador de emergência) para cada colega marcado,
-            // pra não ter que repetir o preenchimento técnico por técnico.
+            // Cria a mesma alocação para cada colega marcado (emergência também desloca a agenda deles).
             for(const colegaId of (d.colegas||[])){
-              const extra = {...d, tecnicoId: colegaId, emergencial:false};
+              const extra = {...d, tecnicoId: colegaId};
               delete extra.colegas;
               await api('/api/allocations', {method:'POST', body:JSON.stringify(extra)});
             }

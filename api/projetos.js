@@ -47,7 +47,7 @@ export default async function handler(req, res) {
         let touched = false;
         allocations.forEach(a => {
           if (a.projetoId === id) {
-            cascadeFields.forEach(f => { a[f] = projetos[idx][f]; });
+            cascadeFields.forEach(f => { if ((a[f] || '') === (before[f] || '')) a[f] = projetos[idx][f]; });
             touched = true;
           }
         });
