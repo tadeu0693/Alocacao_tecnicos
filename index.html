@@ -249,7 +249,7 @@
   let loaded = false;
   let hasUsers = null; // null = ainda não sabemos
 
-  let windowStart = startOfDay(new Date());
+  let windowStart = startOfWeekMon(new Date());
   let selectedTech = null, filterText = "", filterTipo = "Todos", onlyConflicts = false;
   let modal = null, confirmDelete = null;
   let activeTab = "quadro";
@@ -361,6 +361,18 @@
       return {days, dayWidth};
     }
     return {days:14, dayWidth:64};
+  }
+  // Mantém o rótulo do período igual aos dias realmente visíveis no quadro (inclusive ao rolar na horizontal).
+  function bindVisiblePeriod(wrap, periodEl, days, dayWidth, nameCol){
+    const upd = ()=>{
+      const sl = wrap.scrollLeft, vis = wrap.clientWidth - nameCol;
+      if(vis<=0) return;
+      const first = Math.max(0, Math.min(days.length-1, Math.floor(sl/dayWidth)));
+      const last = Math.max(first, Math.min(days.length-1, Math.floor((sl+vis-1)/dayWidth)));
+      periodEl.textContent = fmtShort(days[first])+' — '+fmtShort(days[last]);
+    };
+    wrap.addEventListener('scroll', upd, {passive:true});
+    setTimeout(upd, 0);
   }
   function navStepDays(){ return isMobile() ? viewConfig().days : 7; }
 
@@ -663,11 +675,13 @@
     const totalWidth = dayWidth*DAYS_IN_VIEW;
     const today = startOfDay(new Date()); const conflicts = conflictSet();
     const wrap = el('div',{class:'timeline-wrap', style:'max-height:none; border-top:1px solid var(--border);'});
+    const periodEl = el('div',{class:'period'}, fmtShort(days[0])+' — '+fmtShort(days[days.length-1]));
+    bindVisiblePeriod(wrap, periodEl, days, dayWidth, 0);
     wrap.appendChild(el('div',{class:'nav-row'},
       el('button',{class:'btn ghost small', onclick:()=>{ windowStart=addDays(windowStart,-step); render(); }}, '‹'),
-      el('div',{class:'period'}, fmtShort(days[0])+' — '+fmtShort(days[days.length-1])),
+      periodEl,
       el('div',{style:'display:flex; gap:8px;'},
-        el('button',{class:'btn ghost small', onclick:()=>{ windowStart=startOfDay(new Date()); render(); }}, 'Hoje'),
+        el('button',{class:'btn ghost small', onclick:()=>{ windowStart=startOfWeekMon(new Date()); render(); }}, 'Hoje'),
         el('button',{class:'btn ghost small', onclick:()=>{ windowStart=addDays(windowStart,step); render(); }}, '›'))
     ));
     const header = el('div',{class:'grid-header', style:`width:${totalWidth}px`});
@@ -1054,11 +1068,13 @@
     const totalWidth = dayWidth*DAYS_IN_VIEW;
     const today = startOfDay(new Date()); const conflicts = conflictSet();
     const wrap = el('div',{class:'timeline-wrap'});
+    const periodEl = el('div',{class:'period'}, fmtShort(days[0])+' — '+fmtShort(days[days.length-1]));
+    bindVisiblePeriod(wrap, periodEl, days, dayWidth, nameColWidth);
     wrap.appendChild(el('div',{class:"nav-row"},
       el('button',{class:'btn ghost small', onclick:()=>{ windowStart=addDays(windowStart,-step); render(); }}, '‹'),
-      el('div',{class:'period'}, fmtShort(days[0])+' — '+fmtShort(days[days.length-1])),
+      periodEl,
       el('div',{style:'display:flex; gap:8px;'},
-        el('button',{class:'btn ghost small', onclick:()=>{ windowStart=startOfDay(new Date()); render(); }}, 'Hoje'),
+        el('button',{class:'btn ghost small', onclick:()=>{ windowStart=startOfWeekMon(new Date()); render(); }}, 'Hoje'),
         el('button',{class:'btn ghost small', onclick:()=>{ windowStart=addDays(windowStart,step); render(); }}, '›'))
     ));
     const header = el('div',{class:'grid-header', style:`width:${nameColWidth+totalWidth}px`});
