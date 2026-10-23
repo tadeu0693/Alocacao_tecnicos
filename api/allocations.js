@@ -34,6 +34,13 @@ function reallocateForEmergency(allocations, tecnicoId, ini, fim, modo, emHoraIn
   return allocations;
 }
 
+function parseValorBR(v) {
+  let s = String(v ?? '').replace(/[R$\s]/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  return parseFloat(s);
+}
+
 export default async function handler(req, res) {
   try {
     const user = await getUserFromReq(req);
@@ -140,7 +147,7 @@ export default async function handler(req, res) {
       if (action === 'add_despesa') {
         const { tipo: tipoDespesa, data, valor, notas: notaDesp } = req.body || {};
         if (!['Hotel', 'Refeição', 'Outro'].includes(tipoDespesa)) return res.status(400).json({ error: 'Tipo de despesa inválido.' });
-        const valorNum = parseFloat(String(valor).replace(',', '.'));
+        const valorNum = parseValorBR(valor);
         if (!data || isNaN(valorNum) || valorNum <= 0) return res.status(400).json({ error: 'Informe a data e um valor válido.' });
         alloc.despesas = alloc.despesas || [];
         const entry = { id: crypto.randomUUID(), tipo: tipoDespesa, data, valor: valorNum, notas: notaDesp || '', por: user.email };

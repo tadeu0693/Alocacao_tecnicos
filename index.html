@@ -2076,7 +2076,7 @@
       wrap.appendChild(row);
     });
     if(canManageAnexos(a)){
-      if(!novaHoraExtra) novaHoraExtra = {data: a.inicio, horas:'', notas:''};
+      if(!novaHoraExtra){ const hj=isoLocal(new Date()); novaHoraExtra = {data: hj<a.inicio?a.inicio:(hj>a.fim?a.fim:hj), horas:'', notas:''}; }
       const he = novaHoraExtra;
       wrap.appendChild(el('div',{style:'display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; align-items:flex-end;'},
         el('div',{class:'field', style:'margin-bottom:0; min-width:130px;'}, el('label',{},'Data'), el('input',{type:'date', value:he.data, min:a.inicio, max:a.fim, onchange:(e)=>he.data=e.target.value})),
@@ -2118,7 +2118,7 @@
     });
     if(entries.length>0) wrap.appendChild(el('div',{class:'sub', style:'margin-top:6px; text-align:right; font-weight:600; color:var(--text);'}, 'Total: R$ '+totalPeriodo.toFixed(2).replace('.',',')));
     if(canManageAnexos(a)){
-      if(!novaDespesa) novaDespesa = {tipo:'Hotel', data: a.inicio, valor:'', notas:''};
+      if(!novaDespesa){ const hj=isoLocal(new Date()); novaDespesa = {tipo:'Refeição', data: hj<a.inicio?a.inicio:(hj>a.fim?a.fim:hj), valor:'', notas:''}; }
       const de = novaDespesa;
       wrap.appendChild(el('div',{style:'display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; align-items:flex-end;'},
         el('div',{class:'field', style:'margin-bottom:0; min-width:110px;'}, el('label',{},'Tipo'), selectEl(de.tipo, ['Hotel','Refeição','Outro'], v=>de.tipo=v)),
