@@ -10,7 +10,9 @@ export default async function handler(req, res) {
       getJSON('tecnicos', []), getJSON('projetos', []), getJSON('allocations', []), getJSON('usuarios', [])
     ]);
     if (user.papel === 'tecnico') {
-      const key = a => (a.obra || '').trim().toLowerCase();
+      // Equipe = mesma obra/PO + mesmo local (PO com várias unidades não mistura equipes)
+      const nrm = x => String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
+      const key = a => nrm(a.obra) ? nrm(a.obra) + '|' + nrm(a.local) : '';
       const nome = id => (tecnicos.find(t => t.id === id) || {}).nome;
       const mine = allocations.filter(a => a.tecnicoId === user.tecnicoId).map(a => ({
         ...a,

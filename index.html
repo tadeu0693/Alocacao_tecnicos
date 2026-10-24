@@ -499,11 +499,14 @@
   }
   function colleaguesOn(alloc){
     if(Array.isArray(alloc.colegas)) return alloc.colegas;
-    const obraKey = (alloc.obra||"").trim().toLowerCase();
+    // Equipe = mesma obra/PO + mesmo local (PO com várias unidades não mistura equipes)
+    const nrm = x => String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
+    const key = a => nrm(a.obra) ? nrm(a.obra)+'|'+nrm(a.local) : '';
+    const obraKey = key(alloc);
     if(!obraKey || alloc.tipo==="Indisponibilidade") return [];
     return allocations.filter(a=>
       a.id!==alloc.id && a.tecnicoId!==alloc.tecnicoId &&
-      (a.obra||"").trim().toLowerCase()===obraKey &&
+      key(a)===obraKey &&
       overlaps(fromISO(alloc.inicio),fromISO(alloc.fim),fromISO(a.inicio),fromISO(a.fim))
     ).map(a=>tecById(a.tecnicoId).nome);
   }
