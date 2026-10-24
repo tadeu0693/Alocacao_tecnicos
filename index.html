@@ -240,6 +240,7 @@
     {id:"editor", label:"Equipe (acesso completo)"},
     {id:"planejador", label:"Planejador (cadastra projetos)"},
     {id:"supervisor", label:"Supervisor (aloca técnicos)"},
+    {id:"visualizador", label:"Visualizador (somente leitura)"},
     {id:"tecnico", label:"Técnico de campo"}
   ];
 
@@ -965,6 +966,8 @@
   function canFerias(papel){ return ['admin','editor','supervisor','planejador'].includes(papel); }
   function canAllocate(papel){ return ['admin','editor','supervisor'].includes(papel); }
   function canManageProjetos(papel){ return ['admin','editor','planejador'].includes(papel); }
+  function canManageTecnicos(papel){ return ['admin','editor','supervisor'].includes(papel); }
+  let editPapel = null;
   const TAB_LABEL = {quadro:'Quadro', tecnicos:'Técnicos', ferias:'Férias', projetos:'Projetos', concluidos:'Concluídos', relatorios:'Relatórios', usuarios:'Usuários'};
 
   function renderGestorView(){
@@ -1136,7 +1139,7 @@
     wrap.appendChild(el('h2',{}, 'Técnicos'));
     wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'}, 'Adicione novos técnicos ou remova quem já não faz parte da equipe.'));
     let novo = {nome:'', cargo:'', local:'', tipo:'Implantação'};
-    wrap.appendChild(el('div',{class:'manage-form'},
+    if(canManageTecnicos(currentUser.papel)) wrap.appendChild(el('div',{class:'manage-form'},
       el('div',{class:'field'}, el('label',{},'Nome'), el('input',{type:'text', oninput:(e)=>novo.nome=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Cargo'), el('input',{type:'text', oninput:(e)=>novo.cargo=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Local'), el('input',{type:'text', oninput:(e)=>novo.local=e.target.value})),
@@ -1180,7 +1183,7 @@
         el('div',{class:'info'}, el('b',{}, t.nome), el('span',{}, t.cargo+' · '+t.local+' · '+t.tipo),
           extras ? el('span',{}, extras) : null),
         el('div',{class:'manage-actions'},
-          confirming ? [
+          !canManageTecnicos(currentUser.papel) ? [] : confirming ? [
             el('span',{class:'sub'}, nAlloc>0 ? ('remove '+nAlloc+' alocação(ões)') : ''),
             el('button',{class:'btn danger small', onclick: async ()=>{
               try{ await api('/api/tecnicos?id='+t.id, {method:'DELETE'}); confirmDelete=null; await loadData(); render(); }
@@ -1757,7 +1760,23 @@
           catch(e){ alert(e.error||'Erro ao excluir.'); }
         }}, 'Confirmar exclusão'));
         actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete=null; render(); }}, 'Cancelar'));
+      } else if(editPapel && editPapel.id===u.id){
+        const ep = editPapel;
+        const tecSel = TECNICOS.length ? selectEl(ep.tecnicoId, TECNICOS, v=>ep.tecnicoId=v, t=>t.nome) : el('span',{class:'sub'},'Sem técnicos');
+        tecSel.style.display = ep.papel==='tecnico' ? '' : 'none';
+        actions.appendChild(selectEl(ep.papel, PAPEIS, v=>{ ep.papel=v; tecSel.style.display = v==='tecnico'?'':'none'; }, p=>p.label));
+        actions.appendChild(tecSel);
+        actions.appendChild(el('button',{class:'btn small', onclick: async ()=>{
+          try{
+            await api('/api/usuarios?id='+u.id, {method:'PATCH', body:JSON.stringify({papel:ep.papel, tecnicoId:ep.tecnicoId})});
+            editPapel=null;
+            if(u.id===currentUser.id){ location.reload(); return; }
+            await loadData(); render();
+          }catch(e){ alert(e.error||'Erro ao salvar.'); }
+        }}, 'Salvar'));
+        actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ editPapel=null; render(); }}, 'Cancelar'));
       } else {
+        actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ editPapel={id:u.id, papel:u.papel, tecnicoId:u.tecnicoId||(TECNICOS[0]&&TECNICOS[0].id)||''}; confirmDelete=null; render(); }}, 'Permissão'));
         actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'reset', id:u.id}; render(); }}, 'Trocar senha'));
         if(u.id!==currentUser.id){
           actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'usuario', id:u.id}; render(); }}, 'Excluir'));
