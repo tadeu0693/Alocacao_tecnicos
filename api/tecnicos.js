@@ -108,6 +108,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      const FERIAS_CAMPOS = ['feriasLimite', 'admissao', 'feriasAjuste', 'feriasPref', 'feriasFora'];
+      if (!['admin', 'editor'].includes(user.papel) && FERIAS_CAMPOS.some(k => body[k] !== undefined)) return res.status(403).json({ error: 'Sem permissão para alterar férias.' });
       const { feriasLimite, admissao, feriasAjuste, feriasPref, feriasFora } = body;
       const { nome, cargo, local, tipo, carro, ferramentas, material, epi } = isPlan ? {} : body;
       if (carro !== undefined) tecnicos[idx].carro = String(carro).trim().slice(0, 120);

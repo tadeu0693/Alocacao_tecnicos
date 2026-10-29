@@ -34,6 +34,12 @@ function reallocateForEmergency(allocations, tecnicoId, ini, fim, modo, emHoraIn
   return allocations;
 }
 
+// Férias: gestão (registrar/editar/excluir) = admin e editor; aprovar/desaprovar = só admin.
+// Supervisor e planejador só visualizam.
+const STATUS_APROVACAO = ['Aprovado', 'Reprovado'];
+function podeGerirFerias(u) { return ['admin', 'editor'].includes(u.papel); }
+function podeAlocar(u) { return ['admin', 'editor', 'supervisor', 'planejador'].includes(u.papel); }
+
 function parseValorBR(v) {
   let s = String(v ?? '').replace(/[R$\s]/g, '');
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
@@ -47,8 +53,10 @@ export default async function handler(req, res) {
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
 
     if (req.method === 'POST') {
-      const okPost = ['admin','editor','supervisor'].includes(user.papel) || (user.papel === 'planejador' && req.body && req.body.ferias);
+      const isFeriasReq = !!(req.body && req.body.ferias);
+      const okPost = isFeriasReq ? podeGerirFerias(user) : podeAlocar(user);
       if (!okPost) return res.status(403).json({ error: 'Sem permissão.' });
+      if (isFeriasReq && STATUS_APROVACAO.includes((req.body || {}).statusFerias) && user.papel !== 'admin') return res.status(403).json({ error: 'Só o administrador aprova/desaprova férias.' });
       const { tecnicoId, projetoId, tipo, obra, local, endereco, latitude, longitude, inicio, fim, horaInicio, horaFim, notas, emergencial, emergencialModo, ferias, statusFerias, diasVendidos } = req.body || {};
       if (!tecnicoId || !obra || !inicio || !fim) return res.status(400).json({ error: 'Dados incompletos.' });
       let allocations = await getJSON('allocations', []);
@@ -62,12 +70,12 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      const isPlan = user.papel === 'planejador';
-      if (!['admin','editor','supervisor'].includes(user.papel) && !isPlan) return res.status(403).json({ error: 'Sem permissão.' });
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'ID é obrigatório.' });
       let allocations = await getJSON('allocations', []);
-      if (isPlan) { const al = allocations.find(a => a.id === id); if (!al || !al.ferias) return res.status(403).json({ error: 'Sem permissão.' }); }
+      const al = allocations.find(a => a.id === id);
+      if (!al) return res.status(404).json({ error: 'Alocação não encontrada.' });
+      if (!(al.ferias ? podeGerirFerias(user) : podeAlocar(user))) return res.status(403).json({ error: 'Sem permissão.' });
       allocations = allocations.filter(a => a.id !== id);
       await setJSON('allocations', allocations);
       return res.status(200).json({ ok: true });
@@ -184,7 +192,9 @@ export default async function handler(req, res) {
       }
 
       if (action === 'edit_ferias') {
-        if (!canManage) return res.status(403).json({ error: 'Sem permissão.' });
+        if (!alloc.ferias || !podeGerirFerias(user)) return res.status(403).json({ error: 'Sem permissão.' });
+        const stNovo = (req.body || {}).statusFerias;
+        if (user.papel !== 'admin' && stNovo !== undefined && stNovo !== alloc.statusFerias && (STATUS_APROVACAO.includes(stNovo) || STATUS_APROVACAO.includes(alloc.statusFerias))) return res.status(403).json({ error: 'Só o administrador aprova/desaprova férias.' });
         const { inicio, fim, statusFerias, notas: notaF, diasVendidos: dv } = req.body || {};
         if (inicio !== undefined) alloc.inicio = inicio;
         if (fim !== undefined) alloc.fim = fim;

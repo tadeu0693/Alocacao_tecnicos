@@ -966,8 +966,10 @@
     if(papel==='supervisor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
     return ['quadro','tecnicos','projetos','concluidos','relatorios'];
   }
-  function canFerias(papel){ return ['admin','editor','supervisor','planejador'].includes(papel); }
-  function canAllocate(papel){ return ['admin','editor','supervisor'].includes(papel); }
+  function canFerias(papel){ return ['admin','editor'].includes(papel); } // supervisor/planejador: só visualizam
+  function canAprovarFerias(papel){ return papel==='admin'; }
+  function statusFeriasOpcoes(atual){ return canAprovarFerias(currentUser.papel) ? STATUS_FERIAS : STATUS_FERIAS.filter(x=> !['Aprovado','Reprovado'].includes(x) || x===atual); }
+  function canAllocate(papel){ return ['admin','editor','supervisor','planejador'].includes(papel); }
   function canManageProjetos(papel){ return ['admin','editor','planejador'].includes(papel); }
   function canManageTecnicos(papel){ return ['admin','editor','supervisor'].includes(papel); }
   let editPapel = null;
@@ -1504,10 +1506,10 @@
     if(!novoFerias) novoFerias = {tecnicoId: TECNICOS[0]&&TECNICOS[0].id, statusFerias:'Solicitado', inicio:toISO(new Date()), fim:toISO(new Date()), notas:''};
     const novo = novoFerias;
     const det = el('details',{style:'margin:12px 0;'}, el('summary',{style:'cursor:pointer; color:var(--muted,#9aa);'}, 'Registro direto de período (já programado, sem passar por "Datas solicitadas")'));
-    wrap.appendChild(det);
+    if(podeAlocar) wrap.appendChild(det);
     det.appendChild(el('div',{class:'manage-form'},
       TECNICOS.length ? el('div',{class:'field'}, el('label',{},'Técnico'), selectEl(novo.tecnicoId, TECNICOS, v=>novo.tecnicoId=v, t=>t.nome)) : el('div',{class:'sub'},'Cadastre um técnico primeiro.'),
-      el('div',{class:'field'}, el('label',{},'Status'), selectEl(novo.statusFerias, STATUS_FERIAS, v=>novo.statusFerias=v)),
+      el('div',{class:'field'}, el('label',{},'Status'), selectEl(novo.statusFerias, statusFeriasOpcoes(novo.statusFerias), v=>novo.statusFerias=v)),
       el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:novo.inicio, onchange:(e)=>novo.inicio=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:novo.fim, onchange:(e)=>novo.fim=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Dias vendidos (0–10)'), el('input',{type:'number', min:'0', max:'10', value:String(novo.diasVendidos||0), onchange:(e)=>novo.diasVendidos=Math.max(0,Math.min(10,parseInt(e.target.value,10)||0))})),
@@ -1523,7 +1525,7 @@
       if(editingFeriasId===a.id){
         const d = editFeriasDraft;
         list.appendChild(el('div',{class:'manage-form'},
-          el('div',{class:'field'}, el('label',{},'Status'), selectEl(d.statusFerias, STATUS_FERIAS, v=>d.statusFerias=v)),
+          el('div',{class:'field'}, el('label',{},'Status'), selectEl(d.statusFerias, statusFeriasOpcoes(d.statusFerias), v=>d.statusFerias=v)),
           el('div',{class:'field'}, el('label',{},'Início'), el('input',{type:'date', value:d.inicio, onchange:(e)=>d.inicio=e.target.value})),
           el('div',{class:'field'}, el('label',{},'Fim'), el('input',{type:'date', value:d.fim, onchange:(e)=>d.fim=e.target.value})),
           el('div',{class:'field'}, el('label',{},'Dias vendidos (0–10)'), el('input',{type:'number', min:'0', max:'10', value:String(d.diasVendidos||0), onchange:(e)=>d.diasVendidos=Math.max(0,Math.min(10,parseInt(e.target.value,10)||0))})),
@@ -1549,6 +1551,7 @@
           a.corrigidaEm && a.statusFerias!=='Aprovado' ? el('span',{style:'color:var(--amber);'}, '↻ Data corrigida pelo técnico — reavaliar'+(a.motivoAnterior?(' (motivo anterior: '+a.motivoAnterior+')'):'')) : null,
           alertas.length ? el('span',{style:'color:var(--red);'}, alertas.join(' · ')) : null),
         el('div',{class:'manage-actions'},
+          !canAprovarFerias(currentUser.papel) ? el('span',{class:'status-badge', style:'margin-right:6px;'+(a.statusFerias==='Aprovado'?'background:#1f9d6a; color:#fff;':(a.statusFerias==='Reprovado'?'background:#d64545; color:#fff;':''))}, a.statusFerias==='Aprovado'?'✓ Aprovado':(a.statusFerias==='Reprovado'?'✕ Desaprovado':'Aguardando aprovação')) :
           el('div',{style:'display:inline-flex; gap:0; margin-right:6px;'},
             el('button',{class:'btn small', style: a.statusFerias==='Aprovado' ? 'background:#1f9d6a; color:#fff; border-radius:6px 0 0 6px;' : 'background:transparent; color:var(--text-dim); border:1px solid var(--border); opacity:.55; border-radius:6px 0 0 6px;', onclick: async ()=>{
               if(a.statusFerias==='Aprovado') return;
@@ -1563,8 +1566,8 @@
               try{ await api('/api/allocations?id='+a.id, {method:'PATCH', body:JSON.stringify({action:'edit_ferias', statusFerias:'Reprovado', motivoReprovacao:m.trim()})}); await loadData(); render(); }
               catch(e){ alert(e.error||'Erro.'); }
             }}, '✕ Desaprovado')),
-          el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado', diasVendidos:a.diasVendidos||0}; render(); }}, 'Editar'),
-          el('button',{class:'btn danger small', onclick: async ()=>{
+          !podeAlocar ? null : el('button',{class:'btn ghost small', onclick:()=>{ editingFeriasId=a.id; editFeriasDraft={inicio:a.inicio, fim:a.fim, statusFerias:a.statusFerias||'Solicitado', diasVendidos:a.diasVendidos||0}; render(); }}, 'Editar'),
+          !podeAlocar ? null : el('button',{class:'btn danger small', onclick: async ()=>{
             if(a.statusFerias==='Aprovado' && !confirm('Férias aprovada e fixa no quadro. Excluir mesmo assim?')) return;
             try{ await api('/api/allocations?id='+a.id, {method:'DELETE'}); await loadData(); render(); }
             catch(e){ alert(e.error||'Erro ao excluir.'); }
@@ -2329,7 +2332,7 @@
         renderDespesasSection(a),
         el('div',{class:'modal-actions'},
           el('button',{class:'btn ghost', onclick:()=>{ modal=null; novaHoraExtra=null; novaDespesa=null; render(); }}, 'Fechar'),
-          canAllocate(currentUser.papel) ? el('button',{class:'btn danger', onclick: async ()=>{
+          (a.ferias ? canFerias(currentUser.papel) : canAllocate(currentUser.papel)) ? el('button',{class:'btn danger', onclick: async ()=>{
             try{ await api('/api/allocations?id='+a.id, {method:'DELETE'}); await loadData(); modal=null; render(); }
             catch(e){ alert(e.error||'Erro ao excluir.'); }
           }}, 'Excluir alocação') : null
