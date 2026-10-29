@@ -27,8 +27,17 @@ export async function getUserFromReq(req) {
   return users.find(u => u.id === userId) || null;
 }
 
+// Acesso ao painel Manutenção Fracttal: admin sempre; editor/supervisor/planejador
+// conforme a marcação do admin (sem marcação = liberado, para não quebrar quem já usa).
+export const PAPEIS_FRACTTAL = ['admin', 'editor', 'supervisor', 'planejador'];
+export function temAcessoFracttal(u) {
+  if (!u || !PAPEIS_FRACTTAL.includes(u.papel)) return false;
+  if (u.papel === 'admin') return true;
+  return u.acessoFracttal !== false;
+}
+
 export function publicUser(u) {
-  return u ? { id: u.id, email: u.email, papel: u.papel, tecnicoId: u.tecnicoId || null } : null;
+  return u ? { id: u.id, email: u.email, papel: u.papel, tecnicoId: u.tecnicoId || null, acessoFracttal: temAcessoFracttal(u) } : null;
 }
 
 // Retorna true (e já respondeu) se o erro for de banco não configurado ainda.

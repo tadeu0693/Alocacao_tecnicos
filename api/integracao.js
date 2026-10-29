@@ -11,9 +11,8 @@
 // DELETE /api/integracao?os=39240[&tecnicoId=...]               -> remove alocações da OS
 import crypto from 'crypto';
 import { getJSON, setJSON } from './_lib/db.js';
-import { getUsers, checkPassword, createSession, publicUser, getUserFromReq, sendDbError } from './_lib/auth.js';
+import { getUsers, checkPassword, createSession, publicUser, getUserFromReq, sendDbError, temAcessoFracttal } from './_lib/auth.js';
 
-const PAPEIS_OK = ['admin', 'editor', 'supervisor', 'planejador'];
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const HORA = /^\d{2}:\d{2}$/;
 
@@ -46,13 +45,13 @@ export default async function handler(req, res) {
       const users = await getUsers();
       const u = users.find(x => x.email === String(email || '').trim().toLowerCase());
       if (!u || !(await checkPassword(senha || '', u.senhaHash))) return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
-      if (!PAPEIS_OK.includes(u.papel)) return res.status(403).json({ error: 'Seu usuário não tem acesso ao agendamento.' });
+      if (!temAcessoFracttal(u)) return res.status(403).json({ error: 'Seu usuário não tem acesso ao painel de manutenção. Peça ao administrador.' });
       return res.status(200).json({ token: await createSession(u.id), user: publicUser(u) });
     }
 
     const user = await getUserFromReq(req);
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
-    if (!PAPEIS_OK.includes(user.papel)) return res.status(403).json({ error: 'Sem permissão.' });
+    if (!temAcessoFracttal(user)) return res.status(403).json({ error: 'Seu usuário não tem acesso ao painel de manutenção.' });
 
     if (req.method === 'GET') {
       const [tecnicos, allocations] = await Promise.all([getJSON('tecnicos', []), getJSON('allocations', [])]);

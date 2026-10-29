@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getJSON } from './_lib/db.js';
-import { getUserFromReq, getUsers, saveUsers, hashPassword, sendDbError } from './_lib/auth.js';
+import { getUserFromReq, getUsers, saveUsers, hashPassword, sendDbError, publicUser } from './_lib/auth.js';
 
 const PAPEIS = ['admin', 'editor', 'planejador', 'supervisor', 'visualizador', 'tecnico'];
 
@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       if (user.papel !== 'admin') return res.status(403).json({ error: 'Só administradores podem gerenciar usuários.' });
-      const { email, senha, papel, tecnicoId } = req.body || {};
+      const { email, senha, papel, tecnicoId, acessoFracttal } = req.body || {};
       const emailNorm = String(email || '').trim().toLowerCase();
       if (!emailNorm || !senha) return res.status(400).json({ error: 'Preencha e-mail e senha.' });
       if (!PAPEIS.includes(papel)) return res.status(400).json({ error: 'Papel inválido.' });
@@ -19,17 +19,17 @@ export default async function handler(req, res) {
       const users = await getUsers();
       if (users.some(u => u.email === emailNorm)) return res.status(400).json({ error: 'Já existe um usuário com esse e-mail.' });
       const hash = await hashPassword(senha);
-      const novo = { id: crypto.randomUUID(), email: emailNorm, senhaHash: hash, papel, tecnicoId: papel === 'tecnico' ? tecnicoId : null };
+      const novo = { id: crypto.randomUUID(), email: emailNorm, senhaHash: hash, papel, tecnicoId: papel === 'tecnico' ? tecnicoId : null, acessoFracttal: acessoFracttal !== false };
       users.push(novo);
       await saveUsers(users);
-      return res.status(200).json({ usuario: { id: novo.id, email: novo.email, papel: novo.papel, tecnicoId: novo.tecnicoId } });
+      return res.status(200).json({ usuario: publicUser(novo) });
     }
 
     const id = req.query.id;
 
     if (req.method === 'PATCH') {
       if (!id) return res.status(400).json({ error: 'ID é obrigatório.' });
-      const { senha, papel, tecnicoId } = req.body || {};
+      const { senha, papel, tecnicoId, acessoFracttal } = req.body || {};
       const users = await getUsers();
       const idx = users.findIndex(u => u.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -59,7 +59,13 @@ export default async function handler(req, res) {
         users[idx].senhaHash = await hashPassword(senha);
       }
 
-      if (papel === undefined && senha === undefined) return res.status(400).json({ error: 'Nada para alterar.' });
+      // Acesso ao painel Manutenção Fracttal (só admin)
+      if (acessoFracttal !== undefined) {
+        if (user.papel !== 'admin') return res.status(403).json({ error: 'Só administradores podem alterar acessos.' });
+        users[idx].acessoFracttal = !!acessoFracttal;
+      }
+
+      if (papel === undefined && senha === undefined && acessoFracttal === undefined) return res.status(400).json({ error: 'Nada para alterar.' });
       await saveUsers(users);
       return res.status(200).json({ ok: true });
     }

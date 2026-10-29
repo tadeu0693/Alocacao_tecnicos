@@ -1,5 +1,5 @@
 import { getJSON } from './_lib/db.js';
-import { getUserFromReq, sendDbError } from './_lib/auth.js';
+import { getUserFromReq, publicUser, sendDbError } from './_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Método não permitido.' });
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     }
     const payload = { tecnicos, projetos, allocations };
     if (user.papel === 'admin') {
-      payload.usuarios = usuarios.map(u => ({ id: u.id, email: u.email, papel: u.papel, tecnicoId: u.tecnicoId || null }));
+      payload.usuarios = usuarios.map(u => publicUser(u));
     }
     res.status(200).json(payload);
   } catch (e) {

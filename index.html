@@ -1000,7 +1000,7 @@
 
     wrap.appendChild(el('div',{class:'tabs'},
       tabs.map(t=> el('div',{class:'tab'+(activeTab===t?' active':''), onclick:()=>{ activeTab=t; render(); }}, TAB_LABEL[t])),
-      ['admin','planejador','supervisor'].includes(currentUser.papel) ? el('div',{class:'tab', title:'Abre o painel de manutenção Fracttal em nova aba', onclick:()=>window.open('https://fracttal-painel.vercel.app/'+(TOKEN?('#cav='+TOKEN):''),'_blank','noopener')}, 'Manutenção Fracttal ↗') : null
+      currentUser.acessoFracttal ? el('div',{class:'tab', title:'Abre o painel de manutenção Fracttal em nova aba', onclick:()=>window.open('https://fracttal-painel.vercel.app/'+(TOKEN?('#cav='+TOKEN):''),'_blank','noopener')}, 'Manutenção Fracttal ↗') : null
     ));
 
     if(activeTab==='quadro'){
@@ -1726,7 +1726,13 @@
     wrap.appendChild(el('h2',{}, 'Usuários'));
     wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'}, 'Dê acesso ao sistema para a equipe. "Equipe" edita a agenda inteira; "Técnico" só vê a própria agenda.'));
 
-    let novo = {email:'', senha:'', papel:'editor', tecnicoId: TECNICOS[0]?TECNICOS[0].id:''};
+    let novo = {email:'', senha:'', papel:'editor', tecnicoId: TECNICOS[0]?TECNICOS[0].id:'', acessoFracttal:true};
+    const PAP_FR = ['admin','editor','supervisor','planejador'];
+    const frField = el('div',{class:'checkbox-field', style:'margin-bottom:0; align-self:center;'},
+      el('input',{type:'checkbox', id:'novo-fracttal', checked:true, onchange:(e)=>novo.acessoFracttal=e.target.checked}),
+      el('label',{for:'novo-fracttal'}, 'Acesso à Manutenção Fracttal'));
+    function refreshFrField(){ frField.style.display = PAP_FR.includes(novo.papel) && novo.papel!=='admin' ? '' : 'none'; }
+    refreshFrField();
     const tecnicoField = el('div',{class:'field', style: novo.papel==='tecnico' ? '' : 'display:none;'});
     function refreshTecnicoFieldVisibility(){ tecnicoField.style.display = novo.papel==='tecnico' ? '' : 'none'; }
     tecnicoField.appendChild(el('label',{},'Técnico vinculado'));
@@ -1737,8 +1743,9 @@
     wrap.appendChild(el('div',{class:'manage-form'},
       el('div',{class:'field'}, el('label',{},'E-mail'), el('input',{type:'email', oninput:(e)=>novo.email=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Senha inicial'), el('input',{type:'text', placeholder:'poderá ser trocada depois', oninput:(e)=>novo.senha=e.target.value})),
-      el('div',{class:'field'}, el('label',{},'Papel'), selectEl(novo.papel, PAPEIS, v=>{ novo.papel=v; refreshTecnicoFieldVisibility(); }, p=>p.label)),
+      el('div',{class:'field'}, el('label',{},'Papel'), selectEl(novo.papel, PAPEIS, v=>{ novo.papel=v; refreshTecnicoFieldVisibility(); refreshFrField(); }, p=>p.label)),
       tecnicoField,
+      frField,
       el('button',{class:'btn', onclick: async ()=>{
         usuarioErro = "";
         if(!novo.email.trim() || !novo.senha){ usuarioErro = "Preencha e-mail e senha."; render(); return; }
@@ -1757,7 +1764,8 @@
       const tec = u.papel==='tecnico' ? tecById(u.tecnicoId) : null;
       const item = el('div',{class:'manage-item'},
         el('div',{class:'info'}, el('b',{}, u.email),
-          el('span',{}, papelLabel(u.papel) + (tec ? (' · '+tec.nome) : '') + (u.id===currentUser.id ? ' · você' : ''))),
+          el('span',{}, papelLabel(u.papel) + (tec ? (' · '+tec.nome) : '') + (u.id===currentUser.id ? ' · você' : '')),
+          PAP_FR.includes(u.papel) ? el('span',{style:'color:'+(u.acessoFracttal?'var(--teal)':'var(--text-faint)')}, u.acessoFracttal ? '🔧 Acesso à Manutenção Fracttal' : '🚫 Sem acesso à Manutenção Fracttal') : null),
         el('div',{class:'manage-actions'})
       );
       const actions = item.querySelector('.manage-actions');
@@ -1793,6 +1801,12 @@
         actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ editPapel=null; render(); }}, 'Cancelar'));
       } else {
         actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ editPapel={id:u.id, papel:u.papel, tecnicoId:u.tecnicoId||(TECNICOS[0]&&TECNICOS[0].id)||''}; confirmDelete=null; render(); }}, 'Permissão'));
+        if(PAP_FR.includes(u.papel) && u.papel!=='admin'){
+          actions.appendChild(el('button',{class:'btn ghost small', onclick: async ()=>{
+            try{ await api('/api/usuarios?id='+u.id, {method:'PATCH', body:JSON.stringify({acessoFracttal:!u.acessoFracttal})}); await loadData(); render(); }
+            catch(e){ alert(e.error||'Erro ao salvar.'); }
+          }}, u.acessoFracttal ? 'Bloquear Fracttal' : 'Liberar Fracttal'));
+        }
         actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'reset', id:u.id}; render(); }}, 'Trocar senha'));
         if(u.id!==currentUser.id){
           actions.appendChild(el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'usuario', id:u.id}; render(); }}, 'Excluir'));
