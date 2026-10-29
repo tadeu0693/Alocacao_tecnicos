@@ -999,7 +999,8 @@
     ));
 
     wrap.appendChild(el('div',{class:'tabs'},
-      tabs.map(t=> el('div',{class:'tab'+(activeTab===t?' active':''), onclick:()=>{ activeTab=t; render(); }}, TAB_LABEL[t]))
+      tabs.map(t=> el('div',{class:'tab'+(activeTab===t?' active':''), onclick:()=>{ activeTab=t; render(); }}, TAB_LABEL[t])),
+      ['admin','planejador','supervisor'].includes(currentUser.papel) ? el('div',{class:'tab', title:'Abre o painel de manutenção Fracttal em nova aba', onclick:()=>window.open('https://fracttal-painel.vercel.app/','_blank','noopener')}, 'Manutenção Fracttal ↗') : null
     ));
 
     if(activeTab==='quadro'){
