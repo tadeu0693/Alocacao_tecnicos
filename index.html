@@ -505,7 +505,7 @@
     const obraKey = key(alloc);
     if(!obraKey || alloc.tipo==="Indisponibilidade") return [];
     return allocations.filter(a=>
-      a.id!==alloc.id && a.tecnicoId!==alloc.tecnicoId &&
+      a.id!==alloc.id && a.tecnicoId!==alloc.tecnicoId && a.tipo!=='Indisponibilidade' &&
       key(a)===obraKey &&
       overlaps(fromISO(alloc.inicio),fromISO(alloc.fim),fromISO(a.inicio),fromISO(a.fim))
     ).map(a=>tecById(a.tecnicoId).nome);
@@ -1224,6 +1224,15 @@
 
   function normNome(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim(); }
   function addYearsDate(iso, n){ const d = fromISO(iso); d.setFullYear(d.getFullYear()+n); return d; }
+  const UF_POR_NOME = {'CEARA':'CE','CEARENSE':'CE','FORTALEZA':'CE','SAO PAULO':'SP','RIO GRANDE DO SUL':'RS','PORTO ALEGRE':'RS','RIO DE JANEIRO':'RJ','MINAS GERAIS':'MG','BELO HORIZONTE':'MG','PARANA':'PR','CURITIBA':'PR','SANTA CATARINA':'SC','BAHIA':'BA','PERNAMBUCO':'PE','RECIFE':'PE','GOIAS':'GO','ESPIRITO SANTO':'ES','DISTRITO FEDERAL':'DF','BRASILIA':'DF'};
+  function regiaoDe(tecnicoId){
+    const loc = String(tecById(tecnicoId).local||'').trim();
+    const m = loc.match(/(?:^|[\s\-\/,])([A-Za-z]{2})$/);
+    if(m && !UF_POR_NOME[normNome(loc)]) return m[1].toUpperCase();
+    const k = normNome(loc);
+    return UF_POR_NOME[k] || k;
+  }
+  function mesmaRegiao(t1, t2){ return regiaoDe(t1)===regiaoDe(t2); }
   function isFeriasAlloc(a){ return !!a.ferias || (a.tipo==='Indisponibilidade' && normNome(a.obra)==='FERIAS'); }
   function feriasAllocs(){ return allocations.filter(isFeriasAlloc); }
   function diasDe(a){ return diffDays(fromISO(a.fim), fromISO(a.inicio)) + 1; }
@@ -1325,7 +1334,7 @@
 
   async function registrarFerias(novo){
     if(!novo.tecnicoId || !novo.inicio || !novo.fim || novo.fim<novo.inicio){ alert('Confira as datas.'); return; }
-    const coincide = feriasAllocs().filter(o=> o.tecnicoId!==novo.tecnicoId && overlaps(fromISO(novo.inicio),fromISO(novo.fim),fromISO(o.inicio),fromISO(o.fim)));
+    const coincide = feriasAllocs().filter(o=> o.tecnicoId!==novo.tecnicoId && mesmaRegiao(o.tecnicoId, novo.tecnicoId) && overlaps(fromISO(novo.inicio),fromISO(novo.fim),fromISO(o.inicio),fromISO(o.fim)));
     if(coincide.length && !confirm('Coincide com as férias de: '+coincide.map(o=>tecById(o.tecnicoId).nome).join(', ')+'. Registrar mesmo assim?')) return;
     const r = feriasPeriodo(tecById(novo.tecnicoId));
     if(r && r.limite && fromISO(novo.inicio)>r.limite && !confirm('O início é depois do prazo limite ('+fmtLong(r.limite)+'). Registrar mesmo assim?')) return;
@@ -1540,7 +1549,7 @@
       }
       const alertas = [];
       if(fromISO(a.fim)>=today){
-        const outros = todas.filter(o=> o.id!==a.id && o.tecnicoId!==a.tecnicoId && overlaps(fromISO(a.inicio),fromISO(a.fim),fromISO(o.inicio),fromISO(o.fim)));
+        const outros = todas.filter(o=> o.id!==a.id && o.tecnicoId!==a.tecnicoId && mesmaRegiao(o.tecnicoId, a.tecnicoId) && overlaps(fromISO(a.inicio),fromISO(a.fim),fromISO(o.inicio),fromISO(o.fim)));
         if(outros.length) alertas.push('⚠ Coincide com '+outros.map(o=>tecById(o.tecnicoId).nome.split(' ')[0]).join(', '));
         const r = feriasPeriodo(tecById(a.tecnicoId));
         if(r && r.limite && fromISO(a.inicio)>r.limite) alertas.push('⚠ Início após o prazo limite');
