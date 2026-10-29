@@ -53,6 +53,11 @@ export default async function handler(req, res) {
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
     if (!temAcessoFracttal(user)) return res.status(403).json({ error: 'Seu usuário não tem acesso ao painel de manutenção.' });
 
+    if (req.method === 'GET' && req.query.usuarios) {
+      const users = await getUsers();
+      return res.status(200).json({ usuarios: users.filter(temAcessoFracttal).map(u => ({ email: u.email, papel: u.papel })).sort((a, b) => a.email.localeCompare(b.email)) });
+    }
+
     if (req.method === 'GET') {
       const [tecnicos, allocations] = await Promise.all([getJSON('tecnicos', []), getJSON('allocations', [])]);
       if (req.query.os) {
