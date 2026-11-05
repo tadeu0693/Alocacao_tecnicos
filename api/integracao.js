@@ -24,7 +24,7 @@ function cors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
@@ -47,6 +47,26 @@ export default async function handler(req, res) {
       if (!u || !(await checkPassword(senha || '', u.senhaHash))) return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
       if (!temAcessoFracttal(u)) return res.status(403).json({ error: 'Seu usuário não tem acesso ao painel de manutenção. Peça ao administrador.' });
       return res.status(200).json({ token: await createSession(u.id), user: publicUser(u) });
+    }
+
+    // Robô Fracttal (local): ao gerar a OS de uma pendência, troca o nº da pendência pelo nº da OS.
+    // PATCH /api/integracao?os=<id da pendência>  {novaOS: "39632"}  cabeçalho x-robo-key = INTEGRACAO_ROBO_KEY
+    if (req.method === 'PATCH') {
+      const chave = process.env.INTEGRACAO_ROBO_KEY || '';
+      if (!chave || req.headers['x-robo-key'] !== chave) return res.status(401).json({ error: 'Chave do robô inválida.' });
+      const k = osKey(req.query.os), nova = osKey((req.body || {}).novaOS);
+      if (!k || !nova) return res.status(400).json({ error: 'Informe os e novaOS.' });
+      const allocations = await getJSON('allocations', []);
+      let n = 0;
+      for (const a of allocations) {
+        if (!a.fracttalOS || osKey(a.fracttalOS) !== k) continue;
+        a.fracttalOS = nova;
+        a.obra = String(a.obra || '').replace(/^OS\s*\d+/i, `OS${nova}`);
+        if (!/^OS\d/i.test(a.obra)) a.obra = `OS${nova}` + (a.obra ? ` - ${a.obra}` : '');
+        n++;
+      }
+      if (n) await setJSON('allocations', allocations);
+      return res.status(200).json({ atualizadas: n });
     }
 
     const user = await getUserFromReq(req);
