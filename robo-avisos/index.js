@@ -14,9 +14,29 @@ const headers = { 'x-robo-key': CHAVE, 'Content-Type': 'application/json' };
 const hora = () => new Date().toLocaleTimeString('pt-BR');
 const log = (...a) => console.log(`[${hora()}]`, ...a);
 
+// Usa o Chrome (ou Edge) já instalado no computador, em vez do Chrome baixado pelo puppeteer.
+const fs = require('fs');
+const path = require('path');
+function acharNavegador() {
+  const env = process.env;
+  const candidatos = [
+    env.CHROME_PATH,
+    path.join(env.PROGRAMFILES || 'C:\\Program Files', 'Google\\Chrome\\Application\\chrome.exe'),
+    path.join(env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Google\\Chrome\\Application\\chrome.exe'),
+    env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Google\\Chrome\\Application\\chrome.exe'),
+    path.join(env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Microsoft\\Edge\\Application\\msedge.exe'),
+    path.join(env.PROGRAMFILES || 'C:\\Program Files', 'Microsoft\\Edge\\Application\\msedge.exe'),
+    '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'
+  ].filter(Boolean);
+  return candidatos.find(p => { try { return fs.existsSync(p); } catch (e) { return false; } });
+}
+const navegador = acharNavegador();
+if (navegador) log('Usando navegador:', navegador);
+else log('Chrome/Edge não encontrado — defina CHROME_PATH no .env com o caminho do chrome.exe');
+
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'central-alocacao', dataPath: './.sessao-central' }),
-  puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+  puppeteer: { headless: true, executablePath: navegador, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
 client.on('qr', qr => {
