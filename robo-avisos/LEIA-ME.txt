@@ -1,0 +1,12 @@
+ROBÔ DE AVISOS — CENTRAL DE ALOCAÇÃO
+Separado do robô PPM/Fracttal: sessão de WhatsApp própria, chave própria, não lê grupos.
+
+1. Instale o Node.js 18 ou mais novo (https://nodejs.org), se ainda não tiver.
+2. Dê dois cliques em iniciar.bat. Na primeira vez ele instala tudo (demora alguns minutos).
+3. Vai aparecer um QR code. No celular do NÚMERO DE AVISOS (não o seu):
+   WhatsApp → Aparelhos conectados → Conectar um aparelho → escaneie.
+4. Pronto. Deixe a janela aberta. Os avisos saem sozinhos.
+
+- Para trocar o número: feche a janela, apague a pasta .sessao-central e rode de novo.
+- A janela mostra cada envio (✔) ou erro (✖).
+- Para iniciar junto com o Windows: Win+R → shell:startup → cole um atalho do iniciar.bat.

@@ -1,0 +1,4 @@
+.env
+.sessao-central/
+.wwebjs_cache/
+node_modules/

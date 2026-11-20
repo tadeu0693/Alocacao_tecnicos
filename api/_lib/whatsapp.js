@@ -73,7 +73,7 @@ export async function avisar(itens, tecnicos) {
 }
 
 function chaveOk(req) {
-  const chave = process.env.WHATSAPP_ROBO_KEY || process.env.INTEGRACAO_ROBO_KEY || '';
+  const chave = process.env.WHATSAPP_ROBO_KEY || '';
   return !!chave && req.headers['x-robo-key'] === chave;
 }
 
