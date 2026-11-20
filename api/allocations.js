@@ -1,6 +1,9 @@
 import crypto from 'crypto';
 import { getJSON, setJSON } from './_lib/db.js';
 import { getUserFromReq, sendDbError } from './_lib/auth.js';
+import { avisar, diferencas, rotaRobo } from './_lib/whatsapp.js';
+
+const CAMPOS_EDIT = ['tecnicoId','projetoId','tipo','obra','local','endereco','latitude','longitude','inicio','fim','horaInicio','horaFim','notas'];
 
 function addDaysISO(iso, n) {
   const d = new Date(iso + 'T00:00:00Z');
@@ -49,6 +52,7 @@ function parseValorBR(v) {
 
 export default async function handler(req, res) {
   try {
+    if (await rotaRobo(req, res)) return;
     const user = await getUserFromReq(req);
     if (!user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -66,6 +70,7 @@ export default async function handler(req, res) {
         allocations = reallocateForEmergency(allocations, tecnicoId, inicio, fim, emergencialModo || 'dia', horaInicio, horaFim, novo.id);
       }
       await setJSON('allocations', allocations);
+      if ((req.body || {}).notificar !== false) await avisar([{ tipo: 'nova', alloc: novo }], await getJSON('tecnicos', []));
       return res.status(200).json({ allocation: novo });
     }
 
@@ -78,6 +83,7 @@ export default async function handler(req, res) {
       if (!(al.ferias ? podeGerirFerias(user) : podeAlocar(user))) return res.status(403).json({ error: 'Sem permissão.' });
       allocations = allocations.filter(a => a.id !== id);
       await setJSON('allocations', allocations);
+      if (req.query.notificar === '1' && al.fim >= new Date().toISOString().slice(0, 10)) await avisar([{ tipo: 'cancelada', alloc: al }], await getJSON('tecnicos', []));
       return res.status(200).json({ ok: true });
     }
 
@@ -173,6 +179,27 @@ export default async function handler(req, res) {
         allocations[idx] = alloc;
         await setJSON('allocations', allocations);
         return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'edit') {
+        if (alloc.ferias || !podeAlocar(user)) return res.status(403).json({ error: 'Sem permissão.' });
+        const b = req.body || {};
+        const antes = { ...alloc };
+        CAMPOS_EDIT.forEach(k => { if (b[k] !== undefined) alloc[k] = k === 'projetoId' ? (b[k] || null) : String(b[k] ?? ''); });
+        const ISO = /^\d{4}-\d{2}-\d{2}$/;
+        if (!alloc.tecnicoId || !alloc.obra || !ISO.test(alloc.inicio) || !ISO.test(alloc.fim) || alloc.fim < alloc.inicio) return res.status(400).json({ error: 'Dados inválidos (verifique técnico, atividade e datas).' });
+        if ((alloc.horaInicio && !alloc.horaFim) || (!alloc.horaInicio && alloc.horaFim)) return res.status(400).json({ error: 'Informe horário de início e fim, ou deixe os dois em branco.' });
+        alloc.editadoEm = new Date().toISOString(); alloc.editadoPor = user.email;
+        allocations[idx] = alloc;
+        await setJSON('allocations', allocations);
+        let avisos = 0;
+        if (b.notificar !== false) {
+          const itens = antes.tecnicoId !== alloc.tecnicoId
+            ? [{ tipo: 'cancelada', alloc: antes }, { tipo: 'nova', alloc }]
+            : [{ tipo: 'alterada', alloc, mudancas: diferencas(antes, alloc) }];
+          avisos = await avisar(itens, await getJSON('tecnicos', []));
+        }
+        return res.status(200).json({ allocation: alloc, avisos });
       }
 
       if (action === 'corrigir_ferias') {

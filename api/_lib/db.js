@@ -24,3 +24,12 @@ export async function setJSON(key, value) {
 export async function delKey(key) {
   await client().del(key);
 }
+export async function hset(key, obj) {
+  await client().hset(key, obj);
+}
+export async function hgetall(key) {
+  return (await client().hgetall(key)) || {};
+}
+export async function hdel(key, ...fields) {
+  if (fields.length) await client().hdel(key, ...fields);
+}

@@ -32,10 +32,10 @@ export default async function handler(req, res) {
     } else if (!['admin','editor','supervisor'].includes(user.papel) && !(isPlan && req.method === 'PATCH')) return res.status(403).json({ error: 'Sem permissão.' });
 
     if (req.method === 'POST') {
-      const { nome, cargo, local, tipo, feriasLimite, admissao } = req.body || {};
+      const { nome, cargo, local, tipo, feriasLimite, admissao, telefone } = req.body || {};
       if (!nome || !String(nome).trim()) return res.status(400).json({ error: 'Nome é obrigatório.' });
       const tecnicos = await getJSON('tecnicos', []);
-      const novo = { id: crypto.randomUUID(), nome: String(nome).trim().toUpperCase(), cargo: cargo || '', local: local || '', tipo: tipo || 'Implantação', feriasLimite: feriasLimite || '', admissao: cleanAdmissao(admissao), feriasAjuste: null, carro: '', ferramentas: '', material: '', epi: '' };
+      const novo = { id: crypto.randomUUID(), nome: String(nome).trim().toUpperCase(), cargo: cargo || '', local: local || '', tipo: tipo || 'Implantação', telefone: String(telefone || '').trim().slice(0, 30), feriasLimite: feriasLimite || '', admissao: cleanAdmissao(admissao), feriasAjuste: null, carro: '', ferramentas: '', material: '', epi: '' };
       tecnicos.push(novo);
       await setJSON('tecnicos', tecnicos);
       return res.status(200).json({ tecnico: novo });
@@ -111,7 +111,8 @@ export default async function handler(req, res) {
       const FERIAS_CAMPOS = ['feriasLimite', 'admissao', 'feriasAjuste', 'feriasPref', 'feriasFora'];
       if (!['admin', 'editor'].includes(user.papel) && FERIAS_CAMPOS.some(k => body[k] !== undefined)) return res.status(403).json({ error: 'Sem permissão para alterar férias.' });
       const { feriasLimite, admissao, feriasAjuste, feriasPref, feriasFora } = body;
-      const { nome, cargo, local, tipo, carro, ferramentas, material, epi } = isPlan ? {} : body;
+      const { nome, cargo, local, tipo, carro, ferramentas, material, epi, telefone } = isPlan ? {} : body;
+      if (telefone !== undefined) tecnicos[idx].telefone = String(telefone).trim().slice(0, 30);
       if (carro !== undefined) tecnicos[idx].carro = String(carro).trim().slice(0, 120);
       if (ferramentas !== undefined) tecnicos[idx].ferramentas = String(ferramentas).slice(0, 3000);
       if (material !== undefined) tecnicos[idx].material = String(material).slice(0, 3000);

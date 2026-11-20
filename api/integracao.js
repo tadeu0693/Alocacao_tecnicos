@@ -11,6 +11,7 @@
 // DELETE /api/integracao?os=39240[&tecnicoId=...]               -> remove alocações da OS
 import crypto from 'crypto';
 import { getJSON, setJSON } from './_lib/db.js';
+import { avisar } from './_lib/whatsapp.js';
 import { getUsers, checkPassword, createSession, publicUser, getUserFromReq, sendDbError, temAcessoFracttal } from './_lib/auth.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -141,6 +142,7 @@ export default async function handler(req, res) {
         origem: 'fracttal', fracttalOS: os, criadoPor: user.email, criadoEm: new Date().toISOString()
       }));
       await setJSON('allocations', allocations.concat(criadas));
+      if (b.notificar !== false) await avisar(criadas.map(a => ({ tipo: 'nova', alloc: a })), tecnicos);
       return res.status(200).json({ allocations: criadas });
     }
 
@@ -151,6 +153,9 @@ export default async function handler(req, res) {
       const allocations = await getJSON('allocations', []);
       const resto = allocations.filter(a => !(a.fracttalOS && osKey(a.fracttalOS) === k && (!tid || a.tecnicoId === tid)));
       await setJSON('allocations', resto);
+      const hoje = new Date().toISOString().slice(0, 10);
+      const removidas = allocations.filter(a => !resto.includes(a) && a.fim >= hoje);
+      if (removidas.length && req.query.notificar !== '0') await avisar(removidas.map(a => ({ tipo: 'cancelada', alloc: a })), await getJSON('tecnicos', []));
       return res.status(200).json({ removidas: allocations.length - resto.length });
     }
 

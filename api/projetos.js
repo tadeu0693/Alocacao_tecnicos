@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getJSON, setJSON } from './_lib/db.js';
 import { getUserFromReq, sendDbError } from './_lib/auth.js';
+import { avisar, diferencas } from './_lib/whatsapp.js';
 
 const FIELDS = ['nome','cliente','local','endereco','latitude','longitude','inicio','fim','horaInicio','horaFim','descricao','status'];
 
@@ -45,13 +46,17 @@ export default async function handler(req, res) {
       if (changed) {
         const allocations = await getJSON('allocations', []);
         let touched = false;
+        const itens = [];
         allocations.forEach(a => {
           if (a.projetoId === id) {
+            const antesA = { ...a };
             cascadeFields.forEach(f => { if ((a[f] || '') === (before[f] || '')) a[f] = projetos[idx][f]; });
             touched = true;
+            itens.push({ tipo: 'alterada', alloc: a, mudancas: diferencas(antesA, a) });
           }
         });
         if (touched) await setJSON('allocations', allocations);
+        if (itens.length && body.notificar !== false) await avisar(itens, await getJSON('tecnicos', []));
       }
 
       return res.status(200).json({ projeto: projetos[idx] });

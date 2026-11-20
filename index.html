@@ -1144,11 +1144,12 @@
     const wrap = el('div',{class:'manage-wrap'});
     wrap.appendChild(el('h2',{}, 'Técnicos'));
     wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:14px;'}, 'Adicione novos técnicos ou remova quem já não faz parte da equipe.'));
-    let novo = {nome:'', cargo:'', local:'', tipo:'Implantação'};
+    let novo = {nome:'', cargo:'', local:'', tipo:'Implantação', telefone:''};
     if(canManageTecnicos(currentUser.papel)) wrap.appendChild(el('div',{class:'manage-form'},
       el('div',{class:'field'}, el('label',{},'Nome'), el('input',{type:'text', oninput:(e)=>novo.nome=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Cargo'), el('input',{type:'text', oninput:(e)=>novo.cargo=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Local'), el('input',{type:'text', oninput:(e)=>novo.local=e.target.value})),
+      el('div',{class:'field'}, el('label',{},'WhatsApp (com DDD)'), el('input',{type:'text', placeholder:'(11) 98765-4321', oninput:(e)=>novo.telefone=e.target.value})),
       el('div',{class:'field'}, el('label',{},'Tipo'), selectEl(novo.tipo, ['Implantação','Manutenção','Implantação / Manutenção'], v=>novo.tipo=v)),
       el('button',{class:'btn', onclick: async ()=>{
         if(!novo.nome.trim()) return;
@@ -1165,6 +1166,7 @@
           el('div',{class:'field'}, el('label',{},'Nome'), el('input',{type:'text', value:editTecnicoDraft.nome, oninput:(e)=>editTecnicoDraft.nome=e.target.value})),
           el('div',{class:'field'}, el('label',{},'Cargo'), el('input',{type:'text', value:editTecnicoDraft.cargo, oninput:(e)=>editTecnicoDraft.cargo=e.target.value})),
           el('div',{class:'field'}, el('label',{},'Local'), el('input',{type:'text', value:editTecnicoDraft.local, oninput:(e)=>editTecnicoDraft.local=e.target.value})),
+          el('div',{class:'field'}, el('label',{},'WhatsApp (com DDD)'), el('input',{type:'text', placeholder:'(11) 98765-4321', value:editTecnicoDraft.telefone||'', oninput:(e)=>editTecnicoDraft.telefone=e.target.value})),
           el('div',{class:'field'}, el('label',{},'Tipo'), selectEl(editTecnicoDraft.tipo, ['Implantação','Manutenção','Implantação / Manutenção'], v=>editTecnicoDraft.tipo=v)),
           el('button',{class:'btn', onclick: async ()=>{
             if(!editTecnicoDraft.nome.trim()) return;
@@ -1179,6 +1181,7 @@
         modal = {mode:'tecnico-info', data:{id:t.id, kind, valor:t[kind]||''}}; render();
       }}, label);
       const extras = [
+        t.telefone ? ('📱 '+t.telefone) : '📱 sem WhatsApp',
         t.carro ? ('🚗 '+t.carro) : null,
         t.ferramentas ? '🧰 ferramentas' : null,
         t.material ? '📦 material' : null,
@@ -1202,7 +1205,7 @@
             tecBtn('material','📦 Material'),
             tecBtn('epi','🦺 EPI'),
             el('button',{class:'btn ghost small', onclick:()=>{ modal={mode:'trocas', data:{tecnicoId:t.id}}; render(); }}, '🔧 Trocas'+((t.solicitacoes||[]).length?(' ('+t.solicitacoes.length+')'):'')),
-            el('button',{class:'btn ghost small', onclick:()=>{ editingTecnicoId=t.id; editTecnicoDraft={nome:t.nome, cargo:t.cargo, local:t.local, tipo:t.tipo}; render(); }}, 'Editar'),
+            el('button',{class:'btn ghost small', onclick:()=>{ editingTecnicoId=t.id; editTecnicoDraft={nome:t.nome, cargo:t.cargo, local:t.local, tipo:t.tipo, telefone:t.telefone||''}; render(); }}, 'Editar'),
             el('button',{class:'btn ghost small', onclick:()=>{ confirmDelete={kind:'tecnico', id:t.id}; render(); }}, 'Excluir')
           ]
         )
@@ -2356,8 +2359,15 @@
         renderDespesasSection(a),
         el('div',{class:'modal-actions'},
           el('button',{class:'btn ghost', onclick:()=>{ modal=null; novaHoraExtra=null; novaDespesa=null; render(); }}, 'Fechar'),
+          (!a.ferias && canAllocate(currentUser.papel)) ? el('button',{class:'btn', onclick:()=>{
+            const ed = {id:a.id, notificar:true};
+            ['tecnicoId','projetoId','tipo','obra','local','endereco','latitude','longitude','inicio','fim','horaInicio','horaFim','notas'].forEach(k=> ed[k] = a[k]||'');
+            modal = {mode:'edit', data:ed}; novaHoraExtra=null; novaDespesa=null; render();
+          }}, '✏️ Editar') : null,
           (a.ferias ? canFerias(currentUser.papel) : canAllocate(currentUser.papel)) ? el('button',{class:'btn danger', onclick: async ()=>{
-            try{ await api('/api/allocations?id='+a.id, {method:'DELETE'}); await loadData(); modal=null; render(); }
+            const hojeISO = toISO(new Date());
+            const avisa = !a.ferias && a.fim >= hojeISO && tecById(a.tecnicoId).telefone && confirm('Avisar '+tecById(a.tecnicoId).nome+' no WhatsApp que a atividade foi cancelada?');
+            try{ await api('/api/allocations?id='+a.id+(avisa?'&notificar=1':''), {method:'DELETE'}); await loadData(); modal=null; render(); }
             catch(e){ alert(e.error||'Erro ao excluir.'); }
           }}, 'Excluir alocação') : null
         )
@@ -2365,20 +2375,22 @@
       overlay.appendChild(box); return overlay;
     }
     const d = modal.data;
-    const conflictsFound = d.tecnicoId ? findOverlapsFor(d, null) : [];
+    const isEdit = modal.mode==='edit';
+    if(d.notificar===undefined) d.notificar = true;
+    const conflictsFound = d.tecnicoId ? findOverlapsFor(d, isEdit ? d.id : null) : [];
     const projSel = d.projetoId ? projById(d.projetoId) : null;
     const outOfWindow = !!(projSel && projSel.inicio && projSel.fim && d.inicio && d.fim &&
       (fromISO(d.inicio) < fromISO(projSel.inicio) || fromISO(d.fim) > fromISO(projSel.fim)));
-    const podeEmergencia = conflictsFound.length > 0;
+    const podeEmergencia = !isEdit && conflictsFound.length > 0;
     if(d.emergencial && d.inicio!==d.fim && d.emergencialModo==='horario') d.emergencialModo='dia';
     const box = el('div',{class:'modal'},
-      el('h2',{}, 'Nova alocação'), el('div',{class:'sub'}, 'Aloque um técnico a uma obra, manutenção ou indisponibilidade.'),
+      el('h2',{}, isEdit ? 'Editar alocação' : 'Nova alocação'), el('div',{class:'sub'}, isEdit ? 'Altere datas, horário, local ou descrição. O técnico pode ser avisado da mudança no WhatsApp.' : 'Aloque um técnico a uma obra, manutenção ou indisponibilidade.'),
       conflictsFound.length>0 ? el('div',{class:'warn-box'}, '⚠ Conflito: '+tecById(d.tecnicoId).nome+' já está em "'+conflictsFound[0].obra+'" de '+fmtShort(fromISO(conflictsFound[0].inicio))+' a '+fmtShort(fromISO(conflictsFound[0].fim))+'. '+(podeEmergencia? 'Marque como emergência abaixo para realocar o técnico sem perder o outro compromisso.' : 'Ainda dá para salvar, mas o conflito fica marcado no quadro.')) : null,
       outOfWindow ? el('div',{class:'warn-box'}, '⚠ Fora do período planejado do projeto ('+fmtShort(fromISO(projSel.inicio))+' a '+fmtShort(fromISO(projSel.fim))+'). Ainda dá para salvar.') : null,
       el('div',{class:'field'}, el('label',{},'Técnico'),
         TECNICOS.length ? selectEl(d.tecnicoId, TECNICOS, v=>{ d.tecnicoId=v; d.colegas=(d.colegas||[]).filter(id=>id!==v); render(); }, t=>t.nome)
           : el('div',{class:'sub'}, 'Cadastre um técnico primeiro na aba "Técnicos".')),
-      (TECNICOS.filter(t=>t.id!==d.tecnicoId).length>0) ? el('div',{class:'field'}, el('label',{},'Colegas nessa mesma alocação (opcional)'),
+      (!isEdit && TECNICOS.filter(t=>t.id!==d.tecnicoId).length>0) ? el('div',{class:'field'}, el('label',{},'Colegas nessa mesma alocação (opcional)'),
         el('div',{class:'sub', style:'margin-top:-3px; margin-bottom:6px;'}, 'Marque quem mais vai junto — cria a mesma alocação para todos de uma vez.'),
         el('div',{style:'display:flex; flex-direction:column; gap:6px; max-height:140px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px;'},
           TECNICOS.filter(t=>t.id!==d.tecnicoId).map(t=>
@@ -2413,6 +2425,16 @@
         el('div',{class:'field'}, el('label',{},'Horário fim (opcional)'), el('input',{type:'time', value:d.horaFim||'', onchange:(e)=>{ d.horaFim=e.target.value; render(); }}))
       ),
       el('div',{class:'field'}, el('label',{},'Notas (opcional)'), el('textarea',{oninput:(e)=>d.notas=e.target.value}, d.notas)),
+      (()=>{
+        const ids = [d.tecnicoId].concat(isEdit ? [] : (d.colegas||[]));
+        const semTel = ids.filter(id=>id && !tecById(id).telefone).map(id=>tecById(id).nome);
+        return el('div',{class:'field'},
+          el('div',{class:'checkbox-field', style:'margin-bottom:4px;'},
+            el('input',{type:'checkbox', id:'wa-chk', checked:!!d.notificar, onchange:(e)=>{ d.notificar=e.target.checked; }}),
+            el('label',{for:'wa-chk'}, isEdit ? '📱 Avisar o técnico da alteração no WhatsApp' : '📱 Avisar o técnico no WhatsApp')),
+          semTel.length ? el('div',{class:'sub'}, '⚠ Sem WhatsApp cadastrado (não será avisado): '+semTel.join(', ')+'. Cadastre na aba Técnicos.') : null
+        );
+      })(),
       podeEmergencia ? el('div',{class:'emerg-box'},
         el('div',{class:'checkbox-field'},
           el('input',{type:'checkbox', id:'emerg-chk', checked:!!d.emergencial, onchange:(e)=>{ d.emergencial=e.target.checked; render(); }}),
@@ -2428,6 +2450,13 @@
         el('button',{class:'btn ghost', onclick:()=>{ modal=null; render(); }}, 'Cancelar'),
         el('button',{class:'btn', disabled: !d.tecnicoId || !d.obra || d.fim<d.inicio || (d.emergencial && d.emergencialModo==='horario' && (!d.horaInicio || !d.horaFim)), onclick: async ()=>{
           try{
+            if(isEdit){
+              const r = await api('/api/allocations?id='+d.id, {method:'PATCH', body:JSON.stringify({...d, action:'edit'})});
+              await loadData();
+              const nova = allocations.find(x=>x.id===d.id);
+              modal = nova ? {mode:'detail', data:nova} : null; render();
+              return;
+            }
             await api('/api/allocations', {method:'POST', body:JSON.stringify(d)});
             // Cria a mesma alocação para cada colega marcado (emergência também desloca a agenda deles).
             for(const colegaId of (d.colegas||[])){
@@ -2437,7 +2466,7 @@
             }
             await loadData(); modal=null; render();
           }catch(e){ alert(e.error||'Erro ao salvar.'); }
-        }}, (d.colegas&&d.colegas.length>0) ? ('Salvar aloc. para '+(1+d.colegas.length)+' técnicos') : 'Salvar alocação')
+        }}, isEdit ? 'Salvar alterações' : (d.colegas&&d.colegas.length>0) ? ('Salvar aloc. para '+(1+d.colegas.length)+' técnicos') : 'Salvar alocação')
       )
     );
     overlay.appendChild(box); return overlay;
