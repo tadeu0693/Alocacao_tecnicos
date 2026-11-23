@@ -1791,23 +1791,22 @@
   }
 
   /* ================= documentação (Anexo 3.2 Gerdau) ================= */
-  // RH, admin e equipe editam; os demais papéis de gestão só visualizam.
-  // Ficha por técnico: unidades onde está mobilizado, cada uma com suas respostas (atividades do contrato daquela unidade).
-  let DOC_REF=null, DOC_FICHAS=null, DOC_UNIS=null, docErro='', docLoading=false;
-  let docSel=null, docDraft=null, docDirty=false, docBusy=false, docModo='tecnico', docUniView='', docUniAtiva='', docBusca='', docQAberto=true, docRhInicial=false;
-  let docUniDraft=null, docUniDirty=false;
+  // Uma ficha por técnico + unidade. RH, admin e equipe editam; os demais papéis de gestão só visualizam.
+  let DOC_REF=null, DOC_FICHAS=null, docErro='', docLoading=false;
+  let docSel=null, docFichaId=null, docDraft=null, docDirty=false, docBusy=false, docModo='tecnico', docBusca='', docQAberto=true, docRhInicial=false;
+  let docFiltroUni='', docBuscaSalvas='';
+  const DOC_UNIDADES_SUGERIDAS = ['Gerdau Charqueadas','Gerdau Riograndense (Sapucaia do Sul)','Gerdau Cosigua','Gerdau Ouro Branco','Gerdau Mineração','Gerdau Florestal','Gerdau Pindamonhangaba','Gerdau Cearense','Gerdau Divinópolis','Gerdau São José dos Campos','Gerdau Araçariguama','Gerdau Barão de Cocais','Gerdau Açonorte','Gerdau Usiba'];
+  // Unidades que a tabela Gerdau cita com regra própria (palavras procuradas no texto da tabela).
+  const DOC_CHAVES_UNIDADE = [[/minera/i,['Mineração','mineração']],[/florestal/i,['Florestal','Florestais']],[/ouro branco/i,['Ouro Branco']],[/cosigua/i,['Cosigua']],[/riograndense|sapucaia/i,['Riograndense']],[/pinda/i,['Pindamonhangaba']]];
   function canEditDoc(papel){ return ['admin','editor','rh'].includes(papel); }
   const dNorm = s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const dShort = n=>n.replace(/\s*[-–]\s*Unifica[çc][ãa]o\s*/i,' ').trim();
   const dClone = o=>JSON.parse(JSON.stringify(o));
-  function docBlank(){ return {tipo:'Colaborador CLT', vpn:false, unidades:[], recebidos:{}, obs:''}; }
-  // Fichas antigas (sem unidade) viram uma unidade "Sem unidade definida".
-  function docNormaliza(f){
-    f=dClone(f||docBlank()); if(!f.recebidos) f.recebidos={}; if(!Array.isArray(f.unidades)) f.unidades=[];
-    if(!f.unidades.length && f.ans && Object.keys(f.ans).length) f.unidades=[{uid:'_sem', ans:f.ans}];
-    delete f.ans; f.unidades.forEach(u=>{ if(!u.ans) u.ans={}; }); return f;
-  }
-  function uniById(id){ return id==='_sem' ? {id:'_sem', nome:'Sem unidade definida', uf:'', chaves:[], exigencias:[]} : ((DOC_UNIS||[]).find(u=>u.id===id) || {id, nome:'(unidade removida)', uf:'', chaves:[], exigencias:[]}); }
+  const dNovoId = ()=>{ try{ return crypto.randomUUID(); }catch(e){ return 'f'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); } };
+  function docBlank(tecnicoId){ return {tecnicoId, unidade:'', tipo:'Colaborador CLT', vpn:false, ans:{}, recebidos:{}, obs:''}; }
+  const fichasDe = id=>DOC_FICHAS.filter(f=>f.tecnicoId===id).sort((a,b)=>String(a.unidade).localeCompare(String(b.unidade),'pt'));
+  const fichaById = id=>DOC_FICHAS.find(f=>f.id===id);
+  const nomeUni = f=>f.unidade||'Sem unidade definida';
   async function loadDoc(){
     if(docLoading) return; docLoading=true; docErro='';
     try{
@@ -1815,27 +1814,27 @@
         fetch('/gerdau-anexo-3-2.json').then(r=>{ if(!r.ok) throw {error:'Tabela Gerdau não encontrada.'}; return r.json(); }),
         api('/api/documentacao')
       ]);
-      DOC_REF=ref; DOC_FICHAS=f.fichas||{}; DOC_UNIS=f.unidades||[];
+      DOC_REF=ref; DOC_FICHAS=f.fichas||[];
       DOC_REF.byName={}; DOC_REF.acts.forEach(a=>DOC_REF.byName[a.nome]=a);
     }catch(e){ docErro=e.error||'Não foi possível carregar a documentação.'; }
     docLoading=false; render();
   }
-  function docActsAns(ans){
+  function docActs(f){
     const out=[];
-    for(const q of DOC_REF.qs){ const a=(ans||{})[q.id]; if(!a) continue;
+    for(const q of DOC_REF.qs){ const a=(f.ans||{})[q.id]; if(!a) continue;
       if(q.type==='one'){ out.push(...(a.sel||[])); continue; }
       if(a.yes) out.push(...(q.base||[]), ...(a.sel||[])); }
     return [...new Set(out)].map(n=>DOC_REF.byName[n]).filter(Boolean);
   }
-  function docActs(f){ const m=new Map(); (f.unidades||[]).forEach(u=>docActsAns(u.ans).forEach(a=>m.set(a.nome,a))); return [...m.values()]; }
-  function docPendentes(ans){ return DOC_REF.qs.filter(q=>q.type!=='one' && !q.base && ans[q.id] && ans[q.id].yes && !(ans[q.id].sel||[]).length); }
-  // Linhas da tabela Gerdau que citam a unidade (ex.: "Unidades Gerdau Mineração: 40h").
-  function docRegrasUnidade(uni, acts){
-    const chaves=(uni.chaves||[]).filter(Boolean); if(!chaves.length) return [];
-    const out=[];
+  function docPendentes(f){ return DOC_REF.qs.filter(q=>q.type!=='one' && !q.base && f.ans[q.id] && f.ans[q.id].yes && !(f.ans[q.id].sel||[]).length); }
+  function docRegrasUnidade(unidade, acts){
+    const chaves=[]; DOC_CHAVES_UNIDADE.forEach(([re,ks])=>{ if(re.test(unidade||'')) chaves.push(...ks); });
+    if(!chaves.length) return [];
+    const out=[], vis=new Set();
     acts.forEach(a=>['docs','carga','obs'].forEach(c=>String(a[c]||'').split('\n').forEach(l=>{ l=l.trim();
-      if(l && chaves.some(k=>l.toLowerCase().includes(k.toLowerCase()))) out.push({ativ:dShort(a.nome), t:l}); })));
-    const vis=new Set(); return out.filter(x=>{ const k=x.ativ+'|'+x.t; if(vis.has(k)) return false; vis.add(k); return true; });
+      const k=dShort(a.nome)+'|'+l;
+      if(l && !vis.has(k) && chaves.some(x=>l.includes(x))){ vis.add(k); out.push({ativ:dShort(a.nome), t:l}); } })));
+    return out;
   }
   function docExames(acts, campo){
     const m=new Map();
@@ -1857,27 +1856,22 @@
     return [...m.values()];
   }
   function docAdm(f){ return DOC_REF.adm.filter(a=>a.tipo===f.tipo && (f.vpn || !/confidencialidade/i.test(a.doc))); }
-  // Tudo que o RH precisa receber, com chave estável para marcar "recebido".
   function docRequisitos(f){
     const acts=docActs(f);
-    const uniReq=[]; (f.unidades||[]).forEach(u=>{ const U=uniById(u.uid); (U.exigencias||[]).forEach(t=>uniReq.push({k:'uni:'+U.id+':'+dNorm(t), g:'uni', t, de:[U.nome]})); });
     return [
       ...docDocsAtiv(acts).map(d=>({k:'doc:'+dNorm(d.titulo), g:'doc', t:d.titulo, de:[...d.de]})),
-      ...uniReq,
       ...docAdm(f).map(a=>({k:'adm:'+dNorm(a.doc), g:'adm', t:a.doc, crit:a.crit})),
       ...docExames(acts,'adm').map(e=>({k:'exa:'+dNorm(e.nome), g:'exa', t:e.nome+(e.vals.size?' — '+[...e.vals].join(' / '):''), de:[...e.de]}))
     ];
   }
-  function docProgresso(f){ if(!f) return null; const r=docRequisitos(f); const ok=r.filter(x=>f.recebidos&&f.recebidos[x.k]).length; return {ok, total:r.length}; }
+  function docProgresso(f){ const r=docRequisitos(f); const ok=r.filter(x=>f.recebidos&&f.recebidos[x.k]).length; return {ok, total:r.length}; }
   function docFichaTexto(t, f){
-    const acts=docActs(f), req=docRequisitos(f), exP=docExames(acts,'per');
+    const acts=docActs(f), req=docRequisitos(f), exP=docExames(acts,'per'), rg=docRegrasUnidade(f.unidade, acts);
     const linha=x=>(f.recebidos&&f.recebidos[x.k]?'[x] ':'[ ] ')+x.t;
-    const porUni=[]; f.unidades.forEach(u=>{ const U=uniById(u.uid), l=docActsAns(u.ans), rg=docRegrasUnidade(U,l);
-      porUni.push('', '>> '+U.nome+(U.uf?' ('+U.uf+')':''), ...l.map((a,i)=>(i+1)+'. '+a.nome), ...rg.map(r=>'   ! '+r.ativ+': '+r.t)); });
-    return ['FICHA DE DOCUMENTAÇÃO — '+t.nome+(t.cargo?' ('+t.cargo+')':'')+' — '+f.tipo,'',
-      '1. ATIVIDADES QUE PRECISAM ESTAR NO CONTRATO (POR UNIDADE)', ...porUni,'',
-      '2. DOCUMENTOS DAS ATIVIDADES', ...req.filter(x=>x.g==='doc').map(linha),
-      ...(req.some(x=>x.g==='uni') ? ['','EXIGÊNCIAS PRÓPRIAS DAS UNIDADES', ...req.filter(x=>x.g==='uni').map(x=>linha(x)+' ('+x.de[0]+')')] : []),'',
+    return ['FICHA DE DOCUMENTAÇÃO — '+t.nome+(t.cargo?' ('+t.cargo+')':''),'Unidade: '+nomeUni(f)+' · Contratação: '+f.tipo,'',
+      '1. ATIVIDADES QUE PRECISAM ESTAR NO CONTRATO', ...acts.map((a,i)=>(i+1)+'. '+a.nome),
+      ...(rg.length?['','REGRAS DA TABELA GERDAU PARA ESTA UNIDADE',...rg.map(r=>'- '+r.ativ+': '+r.t)]:[]),'',
+      '2. DOCUMENTOS DAS ATIVIDADES', ...req.filter(x=>x.g==='doc').map(linha),'',
       '3. DOCUMENTOS ADMISSIONAIS', ...req.filter(x=>x.g==='adm').map(linha),'',
       '4. EXAMES ADMISSIONAIS', ...req.filter(x=>x.g==='exa').map(linha),'',
       '5. EXAMES PERIÓDICOS', ...exP.map(e=>'- '+e.nome+(e.vals.size?' — '+[...e.vals].join(' / '):'')),
@@ -1887,12 +1881,18 @@
     try{ await navigator.clipboard.writeText(txt); alert('Copiado. Cole no e-mail ou no WhatsApp.'); }
     catch(e){ window.prompt('Copie o texto abaixo (Ctrl+C):', txt); }
   }
-  function docSelecionar(id){
-    if(docDirty && !confirm('Há alterações não salvas nesta ficha. Descartar?')) return;
-    docSel=id; const f=DOC_FICHAS[id]; docDraft=docNormaliza(f);
-    docUniAtiva=docDraft.unidades[0] ? docDraft.unidades[0].uid : '';
-    docDirty=false; docQAberto=true; render();
+  function docPodeSair(){ return !docDirty || confirm('Há alterações não salvas nesta ficha. Descartar?'); }
+  // Abre uma ficha existente (id) ou uma nova ('novo') do técnico.
+  function docAbrir(tecnicoId, fichaId){
+    if(!docPodeSair()) return false;
+    docSel=tecnicoId;
+    const existente = fichaId && fichaId!=='novo' ? fichaById(fichaId) : null;
+    if(existente){ docFichaId=existente.id; docDraft=dClone(existente); }
+    else { docFichaId='novo'; docDraft=docBlank(tecnicoId); }
+    if(!docDraft.ans) docDraft.ans={}; if(!docDraft.recebidos) docDraft.recebidos={};
+    docDirty=false; docQAberto=true; render(); return true;
   }
+  function docSelecionarTec(id){ const l=fichasDe(id); return docAbrir(id, l.length ? l[0].id : 'novo'); }
   function docMudou(){ docDirty=true; render(); }
 
   function renderDocumentacao(){
@@ -1900,7 +1900,7 @@
     const pode=canEditDoc(currentUser.papel);
     wrap.appendChild(el('h2',{}, 'Documentação de integração — Gerdau'));
     wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:10px;'}, pode
-      ? 'Marque as unidades onde o técnico está mobilizado e responda o que ele vai fazer em cada uma. A ficha mostra as atividades que precisam estar no contrato de cada unidade e os documentos e exames a pedir.'
+      ? 'Em "Por técnico", crie uma ficha para cada unidade onde o técnico vai trabalhar. As fichas salvas ficam na aba "Fichas salvas".'
       : 'Visualização das fichas de documentação. Só RH, administrador e equipe podem alterar.'));
     if(!DOC_REF || !DOC_FICHAS){
       if(!docLoading && !docErro) loadDoc();
@@ -1908,14 +1908,15 @@
       return wrap;
     }
     const modo=(id,txt)=>el('button',{class:docModo===id?'on':'', onclick:()=>{
-      if(docModo==='unidades' && id!=='unidades' && docUniDirty && !confirm('Há alterações não salvas nas unidades. Descartar?')) return;
-      if(id==='unidades'){ docUniDraft=dClone(DOC_UNIS); docUniDirty=false; }
+      if(docModo==='tecnico' && id!=='tecnico'){ if(!docPodeSair()) return;
+        if(docDirty && docSel){ const sv=docFichaId!=='novo'?fichaById(docFichaId):null; docDraft=sv?dClone(sv):docBlank(docSel); if(!sv) docFichaId='novo'; }
+        docDirty=false; }
       docModo=id; render(); }}, txt);
     wrap.appendChild(el('div',{class:'doc-modes'},
-      modo('tecnico','Por técnico'), modo('unidade','Por unidade (o que liberar no contrato)'), modo('unidades','Unidades e exigências'),
+      modo('tecnico','Por técnico'), modo('salvas','Fichas salvas ('+DOC_FICHAS.length+')'),
       el('span',{class:'sub', style:'align-self:center; margin-left:auto;'}, 'Fonte: Anexo 3.2 Gerdau Unificação '+DOC_REF.versao)
     ));
-    wrap.appendChild(docModo==='unidade' ? renderDocPorUnidade() : docModo==='unidades' ? renderDocUnidades(pode) : renderDocTecnico(pode));
+    wrap.appendChild(docModo==='salvas' ? renderDocSalvas() : renderDocTecnico(pode));
     return wrap;
   }
 
@@ -1926,60 +1927,51 @@
     const col=el('div',{class:'doc-list'});
     const v=dNorm(docBusca);
     [...TECNICOS].sort((a,b)=>a.nome.localeCompare(b.nome,'pt')).forEach(t=>{
-      const f=DOC_FICHAS[t.id] ? docNormaliza(DOC_FICHAS[t.id]) : null, pr=docProgresso(f);
-      const unis=f ? f.unidades.map(u=>uniById(u.uid).nome.replace(/^Gerdau\s+/,'')).join(', ') : '';
-      col.appendChild(el('button',{class:'doc-tec'+(docSel===t.id?' sel':''), 'data-n':t.nome+' '+unis, style:v&&!dNorm(t.nome+' '+unis).includes(v)?'display:none':'', onclick:()=>docSelecionar(t.id)},
-        el('b',{}, t.nome), el('span',{}, f ? (unis||'sem unidade')+' · '+pr.ok+'/'+pr.total+' recebidos' : (t.cargo||'—')+' · sem ficha'),
-        f && pr.total ? el('div',{class:'doc-prog'}, el('i',{style:'width:'+Math.round(pr.ok/pr.total*100)+'%'})) : null));
+      const l=fichasDe(t.id), unis=l.map(f=>nomeUni(f).replace(/^Gerdau\s+/,'')).join(', ');
+      col.appendChild(el('button',{class:'doc-tec'+(docSel===t.id?' sel':''), 'data-n':t.nome, style:v&&!dNorm(t.nome).includes(v)?'display:none':'', onclick:()=>docSelecionarTec(t.id)},
+        el('b',{}, t.nome), el('span',{}, l.length ? l.length+' ficha(s): '+unis : (t.cargo||'—')+' · sem ficha')));
     });
     if(!TECNICOS.length) col.appendChild(el('div',{class:'empty'}, 'Nenhum técnico cadastrado.'));
     lista.appendChild(col);
     grid.appendChild(lista);
     const t=TECNICOS.find(x=>x.id===docSel);
-    grid.appendChild(t && docDraft ? renderDocFicha(t, pode) : el('div',{class:'doc-card'}, el('div',{class:'empty'}, 'Escolha um técnico na lista para ver ou preencher a ficha.')));
+    grid.appendChild(t && docDraft ? renderDocFicha(t, pode) : el('div',{class:'doc-card'}, el('div',{class:'empty'}, 'Escolha um técnico na lista para ver ou criar as fichas dele.')));
     return grid;
   }
 
-  function renderDocQuestionario(u, pode){
-    const ans=u.ans, box=el('div',{});
-    DOC_REF.qs.forEach((q,i)=>{
-      const a=ans[q.id]||{}; const sel=a.sel||[];
-      const setA=()=>ans[q.id]||(ans[q.id]={sel:[]});
-      const chips=(tipo)=>el('div',{class:'doc-chips'}, q.opts.map(o=>{
-        const on=o[1].every(n=>sel.includes(n));
-        return el('label',{class:'doc-chip'+(on?' on':'')},
-          el('input',{type:tipo, name:'doc-'+u.uid+'-'+q.id, checked:on, disabled:!pode, onchange:(e)=>{ const A=setA();
-            if(q.type==='one') A.sel=[...o[1]]; else A.sel=e.target.checked ? [...new Set([...A.sel,...o[1]])] : A.sel.filter(n=>!o[1].includes(n));
-            docMudou(); }}), o[0]); }));
-      const row=el('div',{class:'doc-q'});
-      if(q.type==='one'){ row.appendChild(el('div',{class:'doc-qh'}, el('span',{}, (i+1)+'. '+q.q))); row.appendChild(chips('radio')); box.appendChild(row); return; }
-      row.appendChild(el('div',{class:'doc-qh'}, el('span',{}, (i+1)+'. '+q.q),
-        el('div',{class:'doc-yn'},
-          el('button',{class:'s'+(a.yes===true?' on':''), disabled:!pode, onclick:()=>{ setA().yes=true; docMudou(); }}, 'Sim'),
-          el('button',{class:a.yes===false?'on':'', disabled:!pode, onclick:()=>{ const A=setA(); A.yes=false; A.sel=[]; docMudou(); }}, 'Não'))));
-      if(a.yes && q.help) row.appendChild(el('div',{class:'doc-hint'}, q.help));
-      if(a.yes && q.opts){ row.appendChild(el('div',{class:'doc-hint'}, q.optLabel||'Qual? (marque todas que se aplicam)')); row.appendChild(chips('checkbox')); }
-      if(a.yes && q.opts && !q.base && !sel.length) row.appendChild(el('div',{class:'doc-warn'}, 'Marque pelo menos uma opção.'));
-      box.appendChild(row);
-    });
-    return box;
-  }
-
   function renderDocFicha(t, pode){
-    const f=docDraft, salvo=DOC_FICHAS[t.id];
-    const acts=docActs(f), req=docRequisitos(f), exP=docExames(acts,'per');
+    const f=docDraft, salvo=docFichaId!=='novo' ? fichaById(docFichaId) : null;
+    const acts=docActs(f), pend=docPendentes(f), req=docRequisitos(f), exP=docExames(acts,'per'), rg=docRegrasUnidade(f.unidade, acts);
     const aso=[...new Set(acts.map(a=>(String(a.obs||'').match(/ASO deve conter[^.]*\./i)||[])[0]).filter(Boolean))];
     const tipos=[...new Set(DOC_REF.adm.map(a=>a.tipo))];
     const card=el('div',{class:'doc-card'});
+
+    // fichas do técnico (uma por unidade)
+    const minhas=fichasDe(t.id);
+    card.appendChild(el('div',{class:'doc-sec', style:'border-top:0;'},
+      el('div',{class:'doc-modes', style:'margin:0;'},
+        minhas.map(x=>el('button',{class:x.id===docFichaId?'on':'', onclick:()=>docAbrir(t.id, x.id)}, nomeUni(x).replace(/^Gerdau\s+/,''))),
+        docFichaId==='novo' ? el('button',{class:'on'}, 'Nova ficha') : null,
+        (pode && docFichaId!=='novo') ? el('button',{onclick:()=>docAbrir(t.id,'novo')}, '+ Nova ficha (outra unidade)') : null)));
+
     card.appendChild(el('div',{class:'doc-head'},
       el('div',{}, el('h3',{}, t.nome), el('div',{class:'sub'}, [t.cargo,t.local].filter(Boolean).join(' · ')),
-        salvo&&salvo.atualizadoEm ? el('div',{class:'sub', style:'margin-top:4px;'}, 'Atualizado por '+(salvo.atualizadoPor||'—')+' em '+new Date(salvo.atualizadoEm).toLocaleString('pt-BR')) : null),
-      el('div',{style:'display:flex; gap:12px; align-items:center;'}, el('span',{class:'doc-big'}, String(f.unidades.length)), el('span',{class:'sub'}, 'unidade(s)', el('br',{}), String(acts.length)+' atividade(s)'))
+        salvo&&salvo.atualizadoEm ? el('div',{class:'sub', style:'margin-top:4px;'}, 'Salva por '+(salvo.atualizadoPor||'—')+' em '+new Date(salvo.atualizadoEm).toLocaleString('pt-BR')) : el('div',{class:'sub', style:'margin-top:4px;'}, 'Ficha ainda não salva')),
+      el('div',{style:'display:flex; gap:12px; align-items:center;'}, el('span',{class:'doc-big'}, String(acts.length)), el('span',{class:'sub'}, 'atividade(s) para', el('br',{}), 'liberar no contrato'))
     ));
 
-    // dados de contratação
+    // unidade + contratação
+    const usadas=[...new Set(DOC_FICHAS.map(x=>x.unidade).filter(Boolean))];
+    const sugestoes=[...new Set([...DOC_UNIDADES_SUGERIDAS, ...usadas])].sort((a,b)=>a.localeCompare(b,'pt'));
+    const dl=el('datalist',{id:'doc-unis'}, sugestoes.map(u=>el('option',{value:u})));
     const sTipo=selectEl(f.tipo, tipos, v=>{ f.tipo=v; docMudou(); }); if(!pode) sTipo.disabled=true;
+    const outraIgual=f.unidade && minhas.find(x=>x.id!==docFichaId && dNorm(x.unidade)===dNorm(f.unidade));
     card.appendChild(el('div',{class:'doc-sec'},
+      el('div',{class:'field'}, el('label',{}, 'Unidade desta ficha *'),
+        el('input',{type:'text', list:'doc-unis', value:f.unidade||'', disabled:!pode, placeholder:'Escolha ou digite: Gerdau Charqueadas, Gerdau Riograndense…',
+          oninput:(e)=>{ f.unidade=e.target.value; docDirty=true; }, onchange:()=>render()}), dl,
+        outraIgual ? el('div',{class:'doc-warn'}, t.nome+' já tem uma ficha para '+outraIgual.unidade+'. Abra a ficha existente para não duplicar.') : null,
+        !f.unidade ? el('div',{class:'doc-hint'}, 'Obrigatório para salvar.') : null),
       el('div',{class:'row2'},
         el('div',{class:'field'}, el('label',{}, 'Tipo de contratação'), sTipo),
         el('div',{class:'field checkbox-field', style:'align-self:flex-end;'},
@@ -1987,50 +1979,37 @@
           el('label',{for:'doc-vpn'}, 'Vai ter acesso à VPN da Gerdau (exige Termo de Confidencialidade)')))
     ));
 
-    // unidades onde está mobilizado
-    const secU=el('div',{class:'doc-sec'});
-    secU.appendChild(el('h4',{}, 'Unidades onde está mobilizado', el('small',{}, 'marque todas — cada unidade tem o seu contrato')));
-    const opcoesU=[...DOC_UNIS]; if(f.unidades.some(u=>u.uid==='_sem')) opcoesU.push(uniById('_sem'));
-    f.unidades.forEach(u=>{ if(u.uid!=='_sem' && !DOC_UNIS.some(x=>x.id===u.uid)) opcoesU.push(uniById(u.uid)); });
-    secU.appendChild(el('div',{class:'doc-chips'}, opcoesU.map(U=>{ const on=f.unidades.some(u=>u.uid===U.id);
-      return el('label',{class:'doc-chip'+(on?' on':'')}, el('input',{type:'checkbox', checked:on, disabled:!pode, onchange:(e)=>{
-        if(e.target.checked){ f.unidades.push({uid:U.id, ans:{}}); docUniAtiva=U.id; }
-        else { const u=f.unidades.find(x=>x.uid===U.id); const temResp=u && Object.keys(u.ans).length;
-          if(temResp && !confirm('Remover '+U.nome+' desta ficha? As respostas dessa unidade serão apagadas.')){ render(); return; }
-          f.unidades=f.unidades.filter(x=>x.uid!==U.id); if(docUniAtiva===U.id) docUniAtiva=f.unidades[0]?f.unidades[0].uid:''; }
-        docMudou(); }}), U.nome+(U.uf?' · '+U.uf:'')); })));
-    if(!DOC_UNIS.length) secU.appendChild(el('div',{class:'doc-hint'}, 'Nenhuma unidade cadastrada. Cadastre em "Unidades e exigências".'));
-    card.appendChild(secU);
+    // questionário
+    const qs=el('div',{class:'doc-sec'});
+    qs.appendChild(el('h4',{}, 'O que o técnico vai fazer'+(f.unidade?' em '+f.unidade:'')+'?',
+      el('button',{class:'btn ghost small', style:'margin-left:auto;', onclick:()=>{ docQAberto=!docQAberto; render(); }}, docQAberto?'Esconder perguntas':'Mostrar perguntas')));
+    if(docQAberto) DOC_REF.qs.forEach((q,i)=>{
+      const a=f.ans[q.id]||{}; const sel=a.sel||[];
+      const setA=()=>f.ans[q.id]||(f.ans[q.id]={sel:[]});
+      const chips=(tipo)=>el('div',{class:'doc-chips'}, q.opts.map(o=>{
+        const on=o[1].every(n=>sel.includes(n));
+        return el('label',{class:'doc-chip'+(on?' on':'')},
+          el('input',{type:tipo, name:'doc-'+q.id, checked:on, disabled:!pode, onchange:(e)=>{ const A=setA();
+            if(q.type==='one') A.sel=[...o[1]]; else A.sel=e.target.checked ? [...new Set([...A.sel,...o[1]])] : A.sel.filter(n=>!o[1].includes(n));
+            docMudou(); }}), o[0]); }));
+      const row=el('div',{class:'doc-q'});
+      if(q.type==='one'){ row.appendChild(el('div',{class:'doc-qh'}, el('span',{}, (i+1)+'. '+q.q))); row.appendChild(chips('radio')); qs.appendChild(row); return; }
+      row.appendChild(el('div',{class:'doc-qh'}, el('span',{}, (i+1)+'. '+q.q),
+        el('div',{class:'doc-yn'},
+          el('button',{class:'s'+(a.yes===true?' on':''), disabled:!pode, onclick:()=>{ setA().yes=true; docMudou(); }}, 'Sim'),
+          el('button',{class:a.yes===false?'on':'', disabled:!pode, onclick:()=>{ const A=setA(); A.yes=false; A.sel=[]; docMudou(); }}, 'Não'))));
+      if(a.yes && q.help) row.appendChild(el('div',{class:'doc-hint'}, q.help));
+      if(a.yes && q.opts){ row.appendChild(el('div',{class:'doc-hint'}, q.optLabel||'Qual? (marque todas que se aplicam)')); row.appendChild(chips('checkbox')); }
+      if(a.yes && q.opts && !q.base && !sel.length) row.appendChild(el('div',{class:'doc-warn'}, 'Marque pelo menos uma opção.'));
+      qs.appendChild(row);
+    });
+    if(pend.length) qs.appendChild(el('div',{class:'doc-warn'}, 'Falta escolher o tipo em: '+pend.map(q=>q.q).join(' · ')));
+    card.appendChild(qs);
 
-    // questionário da unidade ativa
-    if(f.unidades.length){
-      if(!f.unidades.some(u=>u.uid===docUniAtiva)) docUniAtiva=f.unidades[0].uid;
-      const u=f.unidades.find(x=>x.uid===docUniAtiva), U=uniById(u.uid);
-      const qs=el('div',{class:'doc-sec'});
-      qs.appendChild(el('div',{class:'doc-modes', style:'margin:0 0 10px;'}, f.unidades.map(x=>{ const n=docActsAns(x.ans).length;
-        return el('button',{class:x.uid===docUniAtiva?'on':'', onclick:()=>{ docUniAtiva=x.uid; render(); }}, uniById(x.uid).nome.replace(/^Gerdau\s+/,'')+' ('+n+')'); })));
-      const outras=f.unidades.filter(x=>x.uid!==u.uid && Object.keys(x.ans).length);
-      qs.appendChild(el('h4',{}, 'O que vai fazer em '+U.nome+'?',
-        el('span',{style:'margin-left:auto; display:flex; gap:6px; flex-wrap:wrap;'},
-          (pode && outras.length) ? selectEl('', [{id:'', nome:'Copiar respostas de…'}, ...outras.map(x=>({id:x.uid, nome:uniById(x.uid).nome}))], v=>{
-            if(!v) return; if(Object.keys(u.ans).length && !confirm('Substituir as respostas de '+U.nome+'?')){ render(); return; }
-            u.ans=dClone(f.unidades.find(x=>x.uid===v).ans); docMudou(); }, o=>o.nome) : null,
-          el('button',{class:'btn ghost small', onclick:()=>{ docQAberto=!docQAberto; render(); }}, docQAberto?'Esconder perguntas':'Mostrar perguntas'))));
-      if(docQAberto) qs.appendChild(renderDocQuestionario(u, pode));
-      const pend=docPendentes(u.ans);
-      if(pend.length) qs.appendChild(el('div',{class:'doc-warn'}, 'Falta escolher o tipo em: '+pend.map(q=>q.q).join(' · ')));
-      card.appendChild(qs);
-    }
-
-    // 1. atividades no contrato, por unidade
-    const s1=el('div',{class:'doc-sec'}, el('h4',{}, '1. Atividades que precisam estar no contrato', el('small',{}, 'por unidade · nome igual ao do cadastro Bancodoc')));
-    if(!f.unidades.length) s1.appendChild(el('div',{class:'sub'}, 'Marque ao menos uma unidade acima.'));
-    f.unidades.forEach(u=>{ const U=uniById(u.uid), l=docActsAns(u.ans), rg=docRegrasUnidade(U,l);
-      s1.appendChild(el('div',{class:'doc-uni'},
-        el('b',{}, U.nome+(U.uf?' ('+U.uf+')':'')+' — '+l.length+' atividade(s)'),
-        l.length ? el('ol',{class:'doc-ol'}, l.map(a=>el('li',{}, a.nome))) : el('div',{class:'sub'}, 'Responda as perguntas desta unidade.'),
-        rg.length ? el('div',{class:'doc-regra'}, el('b',{}, 'Regras específicas desta unidade na tabela Gerdau'), el('ul',{class:'doc-ol'}, rg.map(r=>el('li',{}, r.ativ+': '+r.t)))) : null)); });
-    card.appendChild(s1);
+    // 1. atividades no contrato
+    card.appendChild(el('div',{class:'doc-sec'}, el('h4',{}, '1. Atividades que precisam estar no contrato', el('small',{}, (f.unidade||'unidade não informada')+' · nome igual ao do cadastro Bancodoc')),
+      acts.length ? el('ol',{class:'doc-ol'}, acts.map(a=>el('li',{}, a.nome))) : el('div',{class:'sub'}, 'Responda as perguntas acima.'),
+      rg.length ? el('div',{class:'doc-regra'}, el('b',{}, 'Regra da tabela Gerdau para esta unidade'), el('ul',{class:'doc-ol'}, rg.map(r=>el('li',{}, r.ativ+': '+r.t)))) : null));
 
     const check=(x, extra)=>{ const ok=!!f.recebidos[x.k];
       return el('div',{},
@@ -2047,102 +2026,75 @@
       el('summary',{}, 'Carga horária e detalhes: '+dShort(a.nome)),
       el('div',{}, el('b',{}, 'Documentos'), a.docs, el('b',{}, 'Carga horária e validade'), a.carga, a.obs ? el('b',{}, 'Observação') : null, a.obs||null))));
     card.appendChild(s2);
-    if(req.some(x=>x.g==='uni')) card.appendChild(secReq('Exigências próprias das unidades','uni',''));
-
     const s3=secReq('3. Documentos admissionais — '+f.tipo,'adm','Sem documentos para este tipo.', x=>el('details',{class:'doc-det', style:'margin-top:4px;'}, el('summary',{}, 'Critérios mínimos'), el('div',{}, x.crit)));
     if(req.some(x=>x.g==='adm' && /CTPS|e-Social/i.test(x.t))) s3.appendChild(el('div',{class:'doc-hint'}, 'CTPS Digital OU Comprovante do Lançamento no e-Social — qualquer um dos dois vale.'));
     if(!f.vpn) s3.appendChild(el('div',{class:'doc-hint'}, 'Termo de Confidencialidade não entra: só é exigido para quem acessa a VPN.'));
     card.appendChild(s3);
-
     const s4=secReq('4. Exames admissionais','exa','Nenhum exame específico — vale o ASO.');
     aso.forEach(o=>s4.appendChild(el('div',{class:'doc-warn'}, o)));
     card.appendChild(s4);
     card.appendChild(el('div',{class:'doc-sec'}, el('h4',{}, '5. Exames periódicos', el('small',{}, 'para acompanhar o vencimento')),
       exP.length ? el('ul',{class:'doc-ol'}, exP.map(e=>el('li',{}, e.nome+(e.vals.size?' — '+[...e.vals].join(' / '):'')))) : el('div',{class:'sub'}, 'Nenhum exame periódico específico.')));
-
     card.appendChild(el('div',{class:'doc-sec'}, el('div',{class:'field', style:'margin:0;'}, el('label',{}, 'Observações do RH'),
       el('textarea',{disabled:!pode, placeholder:'Ex.: ASO agendado para 02/12; aguardando certificado NR 35.', oninput:(e)=>{ f.obs=e.target.value; docDirty=true; }}, f.obs||''))));
 
     card.appendChild(el('div',{class:'doc-bar'},
       pode ? el('button',{class:'btn', disabled:docBusy, onclick: async ()=>{
+        if(!String(f.unidade||'').trim()){ alert('Informe a unidade desta ficha antes de salvar.'); return; }
+        const id = docFichaId==='novo' ? dNovoId() : docFichaId;
         docBusy=true; render();
-        try{ const r=await api('/api/documentacao?tecnicoId='+encodeURIComponent(t.id), {method:'PUT', body:JSON.stringify({ficha:docDraft})});
-          DOC_FICHAS[t.id]=r.ficha; const ativa=docUniAtiva; docDraft=docNormaliza(r.ficha); docUniAtiva=ativa; docDirty=false; }
+        try{ const r=await api('/api/documentacao?id='+encodeURIComponent(id), {method:'PUT', body:JSON.stringify({ficha:docDraft})});
+          const i=DOC_FICHAS.findIndex(x=>x.id===id); if(i>=0) DOC_FICHAS[i]=r.ficha; else DOC_FICHAS.push(r.ficha);
+          docFichaId=id; docDraft=dClone(r.ficha); docDirty=false; }
         catch(e){ alert(e.error||'Erro ao salvar.'); }
         docBusy=false; render(); }}, docBusy?'Salvando…':'Salvar ficha') : null,
-      pode && docDirty ? el('button',{class:'btn ghost', onclick:()=>{ docDirty=false; docSelecionar(t.id); }}, 'Descartar alterações') : null,
+      pode && docDirty ? el('button',{class:'btn ghost', onclick:()=>{ docDirty=false; docAbrir(t.id, docFichaId); }}, 'Descartar alterações') : null,
       el('button',{class:'btn ghost', onclick:()=>docCopiar(docFichaTexto(t,f))}, 'Copiar ficha'),
+      (pode && docFichaId!=='novo') ? el('button',{class:'btn danger', style:'margin-left:auto;', onclick: async ()=>{
+        if(!confirm('Excluir a ficha de '+t.nome+' em '+nomeUni(f)+'?')) return;
+        try{ await api('/api/documentacao?id='+encodeURIComponent(docFichaId), {method:'DELETE'});
+          DOC_FICHAS=DOC_FICHAS.filter(x=>x.id!==docFichaId); docDirty=false; docSelecionarTec(t.id); }
+        catch(e){ alert(e.error||'Erro ao excluir.'); } }}, 'Excluir ficha') : null,
       docDirty ? el('span',{class:'doc-warn', style:'margin:0;'}, 'Alterações não salvas') : null
     ));
     return card;
   }
 
-  // Visão por unidade: quem está mobilizado e o que precisa constar no contrato daquela unidade
-  function renderDocPorUnidade(){
+  // Aba "Fichas salvas": todas as fichas, com filtro por unidade e lista para o contrato
+  function renderDocSalvas(){
     const box=el('div',{});
-    const usadas=new Set(); Object.values(DOC_FICHAS).forEach(f=>docNormaliza(f).unidades.forEach(u=>usadas.add(u.uid)));
-    const lista=[...DOC_UNIS]; if(usadas.has('_sem')) lista.push(uniById('_sem'));
-    if(!lista.length){ box.appendChild(el('div',{class:'empty'}, 'Nenhuma unidade cadastrada. Cadastre em "Unidades e exigências".')); return box; }
-    if(!lista.some(u=>u.id===docUniView)) docUniView=(lista.find(u=>usadas.has(u.id))||lista[0]).id;
-    const U=uniById(docUniView);
+    const unis=[...new Set(DOC_FICHAS.map(nomeUni))].sort((a,b)=>a.localeCompare(b,'pt'));
+    if(docFiltroUni && !unis.includes(docFiltroUni)) docFiltroUni='';
     box.appendChild(el('div',{class:'manage-form'},
-      el('div',{class:'field'}, el('label',{}, 'Unidade'), selectEl(docUniView, lista, v=>{ docUniView=v; render(); }, x=>x.nome+(usadas.has(x.id)?'':' (ninguém mobilizado)')))));
-    const tecs=TECNICOS.filter(t=>DOC_FICHAS[t.id] && docNormaliza(DOC_FICHAS[t.id]).unidades.some(u=>u.uid===docUniView));
-    if(!tecs.length){ box.appendChild(el('div',{class:'empty'}, 'Nenhum técnico com ficha marcada para '+U.nome+'. Marque a unidade na ficha do técnico em "Por técnico".')); return box; }
-    const mapa=new Map(), todasAtiv=[];
-    tecs.forEach(t=>{ const u=docNormaliza(DOC_FICHAS[t.id]).unidades.find(x=>x.uid===docUniView);
-      docActsAns(u.ans).forEach(a=>{ if(!mapa.has(a.nome)){ mapa.set(a.nome,[]); todasAtiv.push(a); } mapa.get(a.nome).push(t.nome); }); });
-    const rows=[...mapa.entries()].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'pt'));
-    const rg=docRegrasUnidade(U, todasAtiv);
-    box.appendChild(el('h4',{style:'margin:14px 0 8px;'}, 'Atividades que precisam estar no contrato — '+U.nome));
-    box.appendChild(rows.length ? el('table',{class:'doc-table'},
-      el('thead',{}, el('tr',{}, el('th',{}, 'Atividade (nome no cadastro Bancodoc)'), el('th',{}, 'Técnicos'))),
-      el('tbody',{}, rows.map(([n,ps])=>el('tr',{}, el('td',{}, n), el('td',{}, ps.join(', ')))))) : el('div',{class:'empty'}, 'Nenhuma atividade respondida para esta unidade.'));
-    if(rg.length) box.appendChild(el('div',{class:'doc-regra', style:'margin-top:12px;'}, el('b',{}, 'Regras específicas desta unidade na tabela Gerdau'), el('ul',{class:'doc-ol'}, rg.map(r=>el('li',{}, r.ativ+': '+r.t)))));
-    if((U.exigencias||[]).length) box.appendChild(el('div',{class:'doc-regra', style:'margin-top:12px;'}, el('b',{}, 'Exigências próprias da unidade'), el('ul',{class:'doc-ol'}, U.exigencias.map(x=>el('li',{}, x)))));
-    box.appendChild(el('h4',{style:'margin:18px 0 8px;'}, 'Situação da documentação'));
+      el('div',{class:'field'}, el('label',{}, 'Unidade'), selectEl(docFiltroUni, [{id:'', nome:'Todas as unidades'}, ...unis.map(u=>({id:u, nome:u}))], v=>{ docFiltroUni=v; render(); }, o=>o.nome)),
+      el('div',{class:'field'}, el('label',{}, 'Técnico'), el('input',{type:'text', placeholder:'Buscar…', value:docBuscaSalvas, oninput:(e)=>{ docBuscaSalvas=e.target.value; const v=dNorm(docBuscaSalvas); box.querySelectorAll('tr[data-n]').forEach(r=>r.style.display=dNorm(r.dataset.n).includes(v)?'':'none'); }}))));
+    if(!DOC_FICHAS.length){ box.appendChild(el('div',{class:'empty'}, 'Nenhuma ficha salva ainda. Crie em "Por técnico".')); return box; }
+    const tecNome=id=>(TECNICOS.find(t=>t.id===id)||{nome:'(técnico removido)'}).nome;
+    const lista=DOC_FICHAS.filter(f=>!docFiltroUni || nomeUni(f)===docFiltroUni)
+      .sort((a,b)=>nomeUni(a).localeCompare(nomeUni(b),'pt') || tecNome(a.tecnicoId).localeCompare(tecNome(b.tecnicoId),'pt'));
+    const v=dNorm(docBuscaSalvas);
     box.appendChild(el('table',{class:'doc-table'},
-      el('thead',{}, el('tr',{}, el('th',{}, 'Técnico'), el('th',{}, 'Atividades nesta unidade'), el('th',{}, 'Recebidos (geral)'), el('th',{}, ''))),
-      el('tbody',{}, tecs.map(t=>{ const f=docNormaliza(DOC_FICHAS[t.id]), pr=docProgresso(f), u=f.unidades.find(x=>x.uid===docUniView);
-        return el('tr',{}, el('td',{}, t.nome), el('td',{}, String(docActsAns(u.ans).length)), el('td',{}, pr.ok+' de '+pr.total),
-          el('td',{}, el('button',{class:'btn ghost small', onclick:()=>{ docModo='tecnico'; docSelecionar(t.id); docUniAtiva=docUniView; render(); }}, 'Abrir ficha'))); }))));
-    box.appendChild(el('div',{style:'margin-top:14px;'}, el('button',{class:'btn ghost', onclick:()=>docCopiar(['ATIVIDADES A LIBERAR NO CONTRATO — '+U.nome,...rows.map(([n,ps])=>'- '+n+' — '+ps.join(', ')),
-      ...(rg.length?['','REGRAS ESPECÍFICAS DA UNIDADE (TABELA GERDAU)',...rg.map(r=>'- '+r.ativ+': '+r.t)]:[]),
-      ...((U.exigencias||[]).length?['','EXIGÊNCIAS PRÓPRIAS DA UNIDADE',...U.exigencias.map(x=>'- '+x)]:[])].join('\n'))}, 'Copiar lista para o contrato')));
-    return box;
-  }
+      el('thead',{}, el('tr',{}, el('th',{}, 'Técnico'), el('th',{}, 'Unidade'), el('th',{}, 'Contratação'), el('th',{}, 'Atividades'), el('th',{}, 'Recebidos'), el('th',{}, 'Atualizada'), el('th',{}, ''))),
+      el('tbody',{}, lista.map(f=>{ const pr=docProgresso(f), n=tecNome(f.tecnicoId);
+        return el('tr',{'data-n':n, style:v&&!dNorm(n).includes(v)?'display:none':''}, el('td',{}, n), el('td',{}, nomeUni(f)), el('td',{}, f.tipo), el('td',{}, String(docActs(f).length)),
+          el('td',{}, pr.ok+' de '+pr.total), el('td',{}, f.atualizadoEm ? new Date(f.atualizadoEm).toLocaleDateString('pt-BR') : '—'),
+          el('td',{}, el('button',{class:'btn ghost small', onclick:()=>{ docModo='tecnico'; if(!docAbrir(f.tecnicoId, f.id)) docModo='salvas'; }}, 'Abrir'))); }))));
 
-  // Cadastro das unidades e das exigências próprias de cada uma
-  function renderDocUnidades(pode){
-    const box=el('div',{});
-    const L=docUniDraft||(docUniDraft=dClone(DOC_UNIS));
-    box.appendChild(el('div',{class:'sub', style:'margin-bottom:12px;'}, 'Cada unidade pode ter exigências próprias além da tabela Gerdau (ex.: integração da unidade, crachá, curso local). Elas entram na ficha de quem estiver mobilizado ali. As palavras-chave servem para puxar as regras da tabela que citam a unidade (ex.: "Mineração", "Ouro Branco").'));
-    const chg=()=>{ docUniDirty=true; };
-    L.forEach((U,i)=>{
-      const usados=Object.values(DOC_FICHAS).filter(f=>docNormaliza(f).unidades.some(u=>u.uid===U.id)).length;
-      box.appendChild(el('div',{class:'doc-card', style:'margin-bottom:10px;'},
-        el('div',{class:'doc-sec', style:'border-top:0;'},
-          el('div',{class:'row2'},
-            el('div',{class:'field', style:'flex:3;'}, el('label',{}, 'Nome da unidade'), el('input',{type:'text', value:U.nome, disabled:!pode, oninput:(e)=>{ U.nome=e.target.value; chg(); }})),
-            el('div',{class:'field', style:'flex:1;'}, el('label',{}, 'UF'), el('input',{type:'text', value:U.uf||'', maxlength:'2', disabled:!pode, oninput:(e)=>{ U.uf=e.target.value; chg(); }}))),
-          el('div',{class:'field'}, el('label',{}, 'Palavras-chave na tabela Gerdau (separe por vírgula)'),
-            el('input',{type:'text', value:(U.chaves||[]).join(', '), disabled:!pode, oninput:(e)=>{ U.chaves=e.target.value.split(',').map(x=>x.trim()).filter(Boolean); chg(); }})),
-          el('div',{class:'field'}, el('label',{}, 'Exigências próprias da unidade (uma por linha)'),
-            el('textarea',{disabled:!pode, placeholder:'Ex.: Integração de segurança da unidade\nCrachá de acesso', oninput:(e)=>{ U.exigencias=e.target.value.split('\n').map(x=>x.trim()).filter(Boolean); chg(); }}, (U.exigencias||[]).join('\n'))),
-          el('div',{style:'display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;'},
-            el('span',{class:'sub'}, usados ? usados+' técnico(s) mobilizado(s) aqui' : 'Nenhum técnico mobilizado'),
-            pode ? el('button',{class:'btn danger small', onclick:()=>{
-              if(usados && !confirm(U.nome+' está em '+usados+' ficha(s). Remover mesmo assim? As fichas vão mostrar "(unidade removida)".')) return;
-              L.splice(i,1); docUniDirty=true; render(); }}, 'Remover') : null))));
-    });
-    if(pode) box.appendChild(el('div',{class:'doc-bar', style:'border-radius:10px; border:1px solid var(--border);'},
-      el('button',{class:'btn ghost', onclick:()=>{ L.push({id:'u'+Date.now().toString(36), nome:'Nova unidade', uf:'', chaves:[], exigencias:[]}); docUniDirty=true; render(); }}, '+ Adicionar unidade'),
-      el('button',{class:'btn', disabled:docBusy, onclick: async ()=>{
-        docBusy=true; render();
-        try{ const r=await api('/api/documentacao?recurso=unidades&tecnicoId=_', {method:'PUT', body:JSON.stringify({unidades:L})}); DOC_UNIS=r.unidades; docUniDraft=dClone(DOC_UNIS); docUniDirty=false; }
-        catch(e){ alert(e.error||'Erro ao salvar.'); }
-        docBusy=false; render(); }}, docBusy?'Salvando…':'Salvar unidades'),
-      docUniDirty ? el('span',{class:'doc-warn', style:'margin:0;'}, 'Alterações não salvas') : null));
+    if(docFiltroUni){
+      const mapa=new Map(), atv=[];
+      lista.forEach(f=>docActs(f).forEach(a=>{ if(!mapa.has(a.nome)){ mapa.set(a.nome,[]); atv.push(a); } mapa.get(a.nome).push(tecNome(f.tecnicoId)); }));
+      const rows=[...mapa.entries()].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'pt'));
+      const rg=docRegrasUnidade(docFiltroUni, atv);
+      box.appendChild(el('h4',{style:'margin:18px 0 8px;'}, 'Atividades que precisam estar no contrato — '+docFiltroUni));
+      box.appendChild(rows.length ? el('table',{class:'doc-table'},
+        el('thead',{}, el('tr',{}, el('th',{}, 'Atividade (nome no cadastro Bancodoc)'), el('th',{}, 'Técnicos'))),
+        el('tbody',{}, rows.map(([n,ps])=>el('tr',{}, el('td',{}, n), el('td',{}, ps.join(', ')))))) : el('div',{class:'empty'}, 'Nenhuma atividade respondida nas fichas desta unidade.'));
+      if(rg.length) box.appendChild(el('div',{class:'doc-regra', style:'margin-top:12px;'}, el('b',{}, 'Regra da tabela Gerdau para esta unidade'), el('ul',{class:'doc-ol'}, rg.map(r=>el('li',{}, r.ativ+': '+r.t)))));
+      box.appendChild(el('div',{style:'margin-top:14px;'}, el('button',{class:'btn ghost', onclick:()=>docCopiar(['ATIVIDADES A LIBERAR NO CONTRATO — '+docFiltroUni, ...rows.map(([n,ps])=>'- '+n+' — '+ps.join(', ')),
+        ...(rg.length?['','REGRA DA TABELA GERDAU PARA ESTA UNIDADE',...rg.map(r=>'- '+r.ativ+': '+r.t)]:[])].join('\n'))}, 'Copiar lista para o contrato')));
+    } else {
+      box.appendChild(el('div',{class:'doc-hint', style:'margin-top:10px;'}, 'Escolha uma unidade no filtro para ver a lista de atividades que precisa estar no contrato daquela unidade.'));
+    }
     return box;
   }
 

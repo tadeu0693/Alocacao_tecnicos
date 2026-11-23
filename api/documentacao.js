@@ -1,27 +1,17 @@
-import { hgetall, hset, hdel } from './_lib/db.js';
+import crypto from 'crypto';
+import { hgetall, hset, hdel, getJSON, delKey } from './_lib/db.js';
 import { getUserFromReq, sendDbError } from './_lib/auth.js';
-import { getJSON, setJSON } from './_lib/db.js';
 
-// Fichas de documentação (Anexo 3.2 Gerdau) por técnico.
+// Fichas de documentação (Anexo 3.2 Gerdau): uma ficha por técnico + unidade.
 // Leitura: todos os papéis de gestão + RH. Escrita: admin, editor e RH.
 const LEITURA = ['admin', 'editor', 'planejador', 'supervisor', 'visualizador', 'rh'];
 const ESCRITA = ['admin', 'editor', 'rh'];
-const KEY = 'documentacao';
+const KEY = 'doc_fichas';          // hash: fichaId -> ficha
+const KEY_LEGADO = 'documentacao'; // versão anterior (por técnico) — migrada no primeiro GET
+const NOMES_LEGADO = { charqueadas: 'Gerdau Charqueadas', riograndense: 'Gerdau Riograndense (Sapucaia do Sul)', cosigua: 'Gerdau Cosigua', ourobranco: 'Gerdau Ouro Branco', mineracao: 'Gerdau Mineração', florestal: 'Gerdau Florestal', pinda: 'Gerdau Pindamonhangaba', cearense: 'Gerdau Cearense' };
 
 const str = (v, max) => String(v ?? '').slice(0, max);
-
-const KEY_UNI = 'doc_unidades';
-// Unidades iniciais (editáveis na aba). Palavras-chave puxam as regras específicas citadas no Anexo 3.2.
-const UNIDADES_SEED = [
-  { id: 'charqueadas', nome: 'Gerdau Charqueadas', uf: 'RS', chaves: ['Charqueadas'], exigencias: [] },
-  { id: 'riograndense', nome: 'Gerdau Riograndense (Sapucaia do Sul)', uf: 'RS', chaves: ['Riograndense', 'Sapucaia'], exigencias: [] },
-  { id: 'cosigua', nome: 'Gerdau Cosigua', uf: 'RJ', chaves: ['Cosigua'], exigencias: [] },
-  { id: 'ourobranco', nome: 'Gerdau Ouro Branco', uf: 'MG', chaves: ['Ouro Branco'], exigencias: [] },
-  { id: 'mineracao', nome: 'Gerdau Mineração', uf: 'MG', chaves: ['Mineração', 'mineração'], exigencias: [] },
-  { id: 'florestal', nome: 'Gerdau Florestal', uf: 'MG', chaves: ['Florestal', 'Florestais'], exigencias: [] },
-  { id: 'pinda', nome: 'Gerdau Pindamonhangaba', uf: 'SP', chaves: ['Pindamonhangaba', 'Pinda'], exigencias: [] },
-  { id: 'cearense', nome: 'Gerdau Cearense', uf: 'CE', chaves: ['Cearense'], exigencias: [] }
-];
+function parse(v) { if (v && typeof v === 'object') return v; try { return JSON.parse(v); } catch (e) { return null; } }
 
 function limparAns(src) {
   const ans = {};
@@ -37,46 +27,39 @@ function limparAns(src) {
   return ans;
 }
 
-function limparUnidades(list) {
-  if (!Array.isArray(list)) return null;
-  const ids = new Set();
-  return list.slice(0, 60).map(u => {
-    let id = str(u && u.id, 40).replace(/[^a-z0-9_-]/gi, '').toLowerCase() || Math.random().toString(36).slice(2, 10);
-    while (ids.has(id)) id += 'x';
-    ids.add(id);
-    return {
-      id,
-      nome: str(u.nome, 120).trim() || 'Unidade sem nome',
-      uf: str(u.uf, 4).toUpperCase(),
-      chaves: (Array.isArray(u.chaves) ? u.chaves : []).map(c => str(c, 40).trim()).filter(Boolean).slice(0, 10),
-      exigencias: (Array.isArray(u.exigencias) ? u.exigencias : []).map(c => str(c, 300).trim()).filter(Boolean).slice(0, 40)
-    };
-  });
-}
-
 function limpar(f) {
   if (!f || typeof f !== 'object') return null;
-  const ans = limparAns(f.ans);
-  const unidades = (Array.isArray(f.unidades) ? f.unidades : []).slice(0, 20)
-    .filter(u => u && u.uid)
-    .map(u => ({ uid: str(u.uid, 40), ans: limparAns(u.ans) }));
   const recebidos = {};
   if (f.recebidos && typeof f.recebidos === 'object') {
     for (const [k, v] of Object.entries(f.recebidos).slice(0, 400)) if (v) recebidos[str(k, 300)] = true;
   }
   return {
+    tecnicoId: str(f.tecnicoId, 80),
+    unidade: str(f.unidade, 120).trim(),
     tipo: str(f.tipo || 'Colaborador CLT', 80),
     vpn: !!f.vpn,
-    ans,
-    unidades,
+    ans: limparAns(f.ans),
     recebidos,
     obs: str(f.obs, 2000)
   };
 }
 
-function parse(v) {
-  if (v && typeof v === 'object') return v;
-  try { return JSON.parse(v); } catch (e) { return null; }
+async function migrarLegado() {
+  const raw = await hgetall(KEY_LEGADO);
+  const entradas = Object.entries(raw);
+  if (!entradas.length) return;
+  const novas = {};
+  for (const [tecnicoId, v] of entradas) {
+    const f = parse(v); if (!f) continue;
+    const base = { tecnicoId, tipo: f.tipo, vpn: !!f.vpn, recebidos: f.recebidos || {}, obs: f.obs || '', atualizadoEm: f.atualizadoEm, atualizadoPor: f.atualizadoPor };
+    const unis = Array.isArray(f.unidades) && f.unidades.length ? f.unidades : [{ uid: '', ans: f.ans || {} }];
+    for (const u of unis) {
+      const id = crypto.randomUUID();
+      novas[id] = JSON.stringify({ ...base, id, unidade: NOMES_LEGADO[u.uid] || '', ans: u.ans || {} });
+    }
+  }
+  if (Object.keys(novas).length) await hset(KEY, novas);
+  await delKey(KEY_LEGADO);
 }
 
 export default async function handler(req, res) {
@@ -86,39 +69,31 @@ export default async function handler(req, res) {
     if (!LEITURA.includes(user.papel)) return res.status(403).json({ error: 'Sem permissão.' });
 
     if (req.method === 'GET') {
-      const [raw, unidades] = await Promise.all([hgetall(KEY), getJSON(KEY_UNI, null)]);
-      const fichas = {};
-      for (const [k, v] of Object.entries(raw)) { const f = parse(v); if (f) fichas[k] = f; }
-      return res.status(200).json({ fichas, unidades: unidades || UNIDADES_SEED });
+      await migrarLegado();
+      const raw = await hgetall(KEY);
+      const fichas = Object.entries(raw).map(([id, v]) => { const f = parse(v); return f ? { ...f, id } : null; }).filter(Boolean);
+      return res.status(200).json({ fichas });
     }
 
     if (!ESCRITA.includes(user.papel)) return res.status(403).json({ error: 'Só RH, administrador ou equipe podem alterar a documentação.' });
-
-    // Cadastro de unidades e suas exigências próprias
-    if (req.query.recurso === 'unidades') {
-      if (req.method !== 'PUT') return res.status(405).json({ error: 'Método não permitido.' });
-      const unidades = limparUnidades((req.body || {}).unidades);
-      if (!unidades) return res.status(400).json({ error: 'Lista de unidades inválida.' });
-      await setJSON(KEY_UNI, unidades);
-      return res.status(200).json({ unidades });
-    }
-
-    const tecnicoId = String(req.query.tecnicoId || '');
-    if (!tecnicoId) return res.status(400).json({ error: 'Técnico é obrigatório.' });
+    const id = str(req.query.id, 80).replace(/[^a-zA-Z0-9-]/g, '');
+    if (!id) return res.status(400).json({ error: 'Ficha não informada.' });
 
     if (req.method === 'DELETE') {
-      await hdel(KEY, tecnicoId);
+      await hdel(KEY, id);
       return res.status(200).json({ ok: true });
     }
 
     if (req.method === 'PUT') {
-      const tecnicos = await getJSON('tecnicos', []);
-      if (!tecnicos.some(t => t.id === tecnicoId)) return res.status(404).json({ error: 'Técnico não encontrado.' });
       const ficha = limpar((req.body || {}).ficha);
       if (!ficha) return res.status(400).json({ error: 'Ficha inválida.' });
+      if (!ficha.unidade) return res.status(400).json({ error: 'Informe a unidade desta ficha.' });
+      const tecnicos = await getJSON('tecnicos', []);
+      if (!tecnicos.some(t => t.id === ficha.tecnicoId)) return res.status(404).json({ error: 'Técnico não encontrado.' });
+      ficha.id = id;
       ficha.atualizadoEm = new Date().toISOString();
       ficha.atualizadoPor = user.email;
-      await hset(KEY, { [tecnicoId]: JSON.stringify(ficha) });
+      await hset(KEY, { [id]: JSON.stringify(ficha) });
       return res.status(200).json({ ficha });
     }
 
