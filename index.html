@@ -61,6 +61,64 @@
   .badge-papel.admin{color:var(--amber); border-color:var(--amber-dim);}
   .badge-papel.editor{color:var(--blue); border-color:var(--blue-dim);}
   .badge-papel.tecnico{color:var(--teal); border-color:var(--teal-dim);}
+  .badge-papel.rh{color:#d9a6ff; border-color:#4b2f63;}
+
+  /* ===== aba Documentação (Anexo 3.2 Gerdau) ===== */
+  .doc-wrap{padding:20px 24px;}
+  .doc-modes{display:flex; gap:6px; margin:4px 0 16px; flex-wrap:wrap;}
+  .doc-modes button{background:var(--panel-alt); color:var(--text-dim); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font:inherit; font-weight:600; cursor:pointer;}
+  .doc-modes button.on{background:var(--blue); color:#fff; border-color:var(--blue);}
+  .doc-grid{display:grid; grid-template-columns:270px minmax(0,1fr); gap:16px; align-items:start;}
+  .doc-list{display:flex; flex-direction:column; gap:6px; max-height:75vh; overflow-y:auto; padding-right:2px;}
+  .doc-search{width:100%; margin-bottom:8px;}
+  .doc-tec{background:var(--panel-alt); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; text-align:left; color:var(--text); font:inherit;}
+  .doc-tec:hover{border-color:var(--text-faint);}
+  .doc-tec.sel{border-color:var(--blue); box-shadow:inset 3px 0 0 var(--blue);}
+  .doc-tec b{display:block; font-size:12.5px;}
+  .doc-tec span{display:block; color:var(--text-dim); font-size:11px; margin-top:2px;}
+  .doc-prog{height:4px; background:var(--border); border-radius:4px; margin-top:7px; overflow:hidden;}
+  .doc-prog i{display:block; height:100%; background:var(--teal);}
+  .doc-card{background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden;}
+  .doc-head{padding:14px 16px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start; background:var(--panel-alt);}
+  .doc-head h3{margin:0; font-size:16px;}
+  .doc-sec{padding:14px 16px; border-top:1px solid var(--border);}
+  .doc-sec h4{margin:0 0 10px; font-size:13px; display:flex; gap:8px; align-items:baseline; flex-wrap:wrap;}
+  .doc-sec h4 small{color:var(--text-dim); font-weight:500; font-size:11.5px;}
+  .doc-q{padding:10px 0; border-bottom:1px solid var(--border-soft);}
+  .doc-q:last-child{border-bottom:0;}
+  .doc-qh{display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap;}
+  .doc-qh span{flex:1 1 240px; font-weight:500;}
+  .doc-yn{display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  .doc-yn button{background:transparent; color:var(--text-dim); border:0; padding:7px 14px; font:inherit; font-weight:600; cursor:pointer; min-width:56px;}
+  .doc-yn button.on{background:var(--text); color:var(--bg);}
+  .doc-yn button.on.s{background:var(--blue); color:#fff;}
+  .doc-yn button:disabled{cursor:default;}
+  .doc-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .doc-chip{display:flex; gap:6px; align-items:center; padding:6px 10px; border:1px solid var(--border); border-radius:99px; background:var(--panel-alt); cursor:pointer; font-size:12px;}
+  .doc-chip input{margin:0; accent-color:var(--blue);}
+  .doc-chip.on{border-color:var(--blue); background:var(--blue-dim);}
+  .doc-hint{color:var(--text-dim); font-size:11.5px; margin-top:6px;}
+  .doc-warn{color:var(--amber); font-size:12px; margin-top:6px;}
+  .doc-big{font-family:'Space Grotesk',sans-serif; font-size:34px; font-weight:700; color:var(--blue); line-height:1;}
+  .doc-ol{margin:0; padding-left:20px;} .doc-ol li{margin:4px 0;}
+  .doc-check{display:flex; gap:9px; align-items:flex-start; padding:7px 0; border-bottom:1px solid var(--border-soft);}
+  .doc-check input{margin-top:2px; width:16px; height:16px; accent-color:var(--teal); flex:none;}
+  .doc-check.ok > span{color:var(--text-dim); text-decoration:line-through;}
+  .doc-check small{color:var(--text-faint); display:block;}
+  .doc-det{border:1px solid var(--border); border-radius:8px; margin:6px 0; background:var(--panel-alt);}
+  .doc-det summary{cursor:pointer; padding:8px 10px; font-weight:600; font-size:12px;}
+  .doc-det div{padding:0 10px 10px; white-space:pre-line; font-size:12px; color:var(--text-dim);}
+  .doc-det b{display:block; color:var(--text); margin-top:6px;}
+  .doc-bar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:12px 16px; border-top:1px solid var(--border); background:var(--panel-alt); position:sticky; bottom:0;}
+  table.doc-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.doc-table th, table.doc-table td{text-align:left; padding:8px; border-bottom:1px solid var(--border); vertical-align:top;}
+  table.doc-table th{color:var(--text-dim); font-weight:600; font-size:11.5px;}
+  @media (max-width: 720px){
+    .doc-wrap{padding:14px;}
+    .doc-grid{grid-template-columns:minmax(0,1fr);}
+    .doc-list{max-height:220px;}
+    .doc-yn{width:100%;} .doc-yn button{flex:1;}
+  }
 
   .tabs{display:flex; gap:4px; padding:0 24px; border-bottom:1px solid var(--border); background:var(--panel); flex-wrap:wrap;}
   .tab{padding:11px 14px; font-size:12.5px; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; font-weight:600;}
@@ -241,6 +299,7 @@
     {id:"planejador", label:"Planejador (cadastra projetos)"},
     {id:"supervisor", label:"Supervisor (aloca técnicos)"},
     {id:"visualizador", label:"Visualizador (somente leitura)"},
+    {id:"rh", label:"RH (vê tudo, só edita Documentação)"},
     {id:"tecnico", label:"Técnico de campo"}
   ];
 
@@ -574,7 +633,7 @@
   function logoutBtn(){
     return el('button',{class:'btn ghost small', onclick: async ()=>{
       try{ await api('/api/logout', {method:'POST'}); }catch(e){}
-      setToken(null); currentUser=null; loginEmail=""; loginSenha=""; loginError=""; render();
+      setToken(null); currentUser=null; loginEmail=""; loginSenha=""; loginError=""; DOC_FICHAS=null; docSel=null; docDraft=null; docDirty=false; docRhInicial=false; render();
     }}, 'Sair');
   }
   function trocarSenhaBtn(){
@@ -960,11 +1019,12 @@
 
   /* ================= GESTOR / EDITOR VIEW ================= */
   function tabsForPapel(papel){
-    if(papel==='admin') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios','usuarios'];
-    if(papel==='editor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
-    if(papel==='planejador') return ['quadro','ferias','projetos','concluidos','relatorios'];
-    if(papel==='supervisor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
-    return ['quadro','tecnicos','projetos','concluidos','relatorios'];
+    if(papel==='admin') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios','documentacao','usuarios'];
+    if(papel==='editor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios','documentacao'];
+    if(papel==='planejador') return ['quadro','ferias','projetos','concluidos','relatorios','documentacao'];
+    if(papel==='supervisor') return ['quadro','tecnicos','ferias','projetos','concluidos','relatorios','documentacao'];
+    if(papel==='rh') return ['documentacao','quadro','tecnicos','ferias','projetos','concluidos','relatorios'];
+    return ['quadro','tecnicos','projetos','concluidos','relatorios','documentacao'];
   }
   function canFerias(papel){ return ['admin','editor'].includes(papel); } // supervisor/planejador: só visualizam
   function canAprovarFerias(papel){ return papel==='admin'; }
@@ -973,11 +1033,12 @@
   function canManageProjetos(papel){ return ['admin','editor','planejador'].includes(papel); }
   function canManageTecnicos(papel){ return ['admin','editor','supervisor'].includes(papel); }
   let editPapel = null;
-  const TAB_LABEL = {quadro:'Quadro', tecnicos:'Técnicos', ferias:'Férias', projetos:'Projetos', concluidos:'Concluídos', relatorios:'Relatórios', usuarios:'Usuários'};
+  const TAB_LABEL = {quadro:'Quadro', tecnicos:'Técnicos', ferias:'Férias', projetos:'Projetos', concluidos:'Concluídos', relatorios:'Relatórios', documentacao:'Documentação', usuarios:'Usuários'};
 
   function renderGestorView(){
+    if(currentUser.papel==='rh' && !docRhInicial){ docRhInicial=true; activeTab='documentacao'; }
     const tabs = tabsForPapel(currentUser.papel);
-    if(!tabs.includes(activeTab)) activeTab = 'quadro';
+    if(!tabs.includes(activeTab)) activeTab = tabs[0];
     const wrap = el('div',{});
     { const _ob = offlineBanner(); if(_ob) wrap.appendChild(_ob); }
     wrap.appendChild(el('div',{class:'topbar'},
@@ -1020,6 +1081,8 @@
       wrap.appendChild(renderProjetosConcluidos());
     } else if(activeTab==='relatorios'){
       wrap.appendChild(renderRelatorios());
+    } else if(activeTab==='documentacao'){
+      wrap.appendChild(renderDocumentacao());
     } else if(activeTab==='usuarios'){
       wrap.appendChild(renderUsuariosManage());
     }
@@ -1721,6 +1784,256 @@
     if(concluidos.length===0) list.appendChild(el('div',{class:'empty'}, 'Nenhum projeto concluído ainda.'));
     wrap.appendChild(list);
     return wrap;
+  }
+
+  /* ================= documentação (Anexo 3.2 Gerdau) ================= */
+  // RH, admin e equipe editam; os demais papéis de gestão só visualizam.
+  let DOC_REF=null, DOC_FICHAS=null, docErro='', docLoading=false;
+  let docSel=null, docDraft=null, docDirty=false, docBusy=false, docModo='tecnico', docProj='', docBusca='', docQAberto=true, docRhInicial=false;
+  function canEditDoc(papel){ return ['admin','editor','rh'].includes(papel); }
+  const dNorm = s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const dShort = n=>n.replace(/\s*[-–]\s*Unifica[çc][ãa]o\s*/i,' ').trim();
+  function docBlank(){ return {tipo:'Colaborador CLT', vpn:false, ans:{}, recebidos:{}, obs:''}; }
+  async function loadDoc(){
+    if(docLoading) return; docLoading=true; docErro='';
+    try{
+      const [ref, f] = await Promise.all([
+        fetch('/gerdau-anexo-3-2.json').then(r=>{ if(!r.ok) throw {error:'Tabela Gerdau não encontrada.'}; return r.json(); }),
+        api('/api/documentacao')
+      ]);
+      DOC_REF=ref; DOC_FICHAS=f.fichas||{};
+      DOC_REF.byName={}; DOC_REF.acts.forEach(a=>DOC_REF.byName[a.nome]=a);
+    }catch(e){ docErro=e.error||'Não foi possível carregar a documentação.'; }
+    docLoading=false; render();
+  }
+  function docActs(f){
+    const out=[];
+    for(const q of DOC_REF.qs){ const a=(f.ans||{})[q.id]; if(!a) continue;
+      if(q.type==='one'){ out.push(...(a.sel||[])); continue; }
+      if(a.yes) out.push(...(q.base||[]), ...(a.sel||[])); }
+    return [...new Set(out)].map(n=>DOC_REF.byName[n]).filter(Boolean);
+  }
+  function docPendentes(f){ return DOC_REF.qs.filter(q=>q.type!=='one' && !q.base && f.ans[q.id] && f.ans[q.id].yes && !(f.ans[q.id].sel||[]).length); }
+  function docExames(acts, campo){
+    const m=new Map();
+    for(const a of acts) for(let line of String(a[campo]||'').split('\n')){
+      line=line.trim(); if(!line || /n[ãa]o se aplica/i.test(line)) continue;
+      const c=line.replace(/^\*/,''); const i=c.search(/\s[-–]\s?|-\s?\d/);
+      const nome=(i>0?c.slice(0,i):c).trim(); const val=i>0?c.slice(i).replace(/^\s*[-–]\s*/,'').trim():'';
+      const k=dNorm(nome); if(!m.has(k)) m.set(k,{nome, vals:new Set(), de:new Set()});
+      const e=m.get(k); if(val) e.vals.add(val); e.de.add(dShort(a.nome));
+    }
+    return [...m.values()].sort((x,y)=>x.nome.localeCompare(y.nome,'pt'));
+  }
+  function docDocsAtiv(acts){
+    const m=new Map();
+    for(const a of acts){ if(/n[ãa]o [ée] solicitado/i.test(a.docs)) continue;
+      for(const it of String(a.docs||'').split(/\n(?=\s*\d+\s*[.)-]\s*)/)){
+        const t=it.replace(/^\s*\d+\s*[.)-]\s*/,'').split('\n')[0].trim(); const k=dNorm(t); if(!k) continue;
+        if(!m.has(k)) m.set(k,{titulo:t, de:new Set()}); m.get(k).de.add(dShort(a.nome)); } }
+    return [...m.values()];
+  }
+  function docAdm(f){ return DOC_REF.adm.filter(a=>a.tipo===f.tipo && (f.vpn || !/confidencialidade/i.test(a.doc))); }
+  // Tudo que o RH precisa receber, com chave estável para marcar "recebido".
+  function docRequisitos(f){
+    const acts=docActs(f);
+    return [
+      ...docDocsAtiv(acts).map(d=>({k:'doc:'+dNorm(d.titulo), g:'doc', t:d.titulo, de:[...d.de]})),
+      ...docAdm(f).map(a=>({k:'adm:'+dNorm(a.doc), g:'adm', t:a.doc, crit:a.crit})),
+      ...docExames(acts,'adm').map(e=>({k:'exa:'+dNorm(e.nome), g:'exa', t:e.nome+(e.vals.size?' — '+[...e.vals].join(' / '):''), de:[...e.de]}))
+    ];
+  }
+  function docProgresso(f){ if(!f) return null; const r=docRequisitos(f); const ok=r.filter(x=>f.recebidos&&f.recebidos[x.k]).length; return {ok, total:r.length}; }
+  function docFichaTexto(t, f){
+    const acts=docActs(f), req=docRequisitos(f), exP=docExames(acts,'per');
+    const linha=x=>(f.recebidos&&f.recebidos[x.k]?'[x] ':'[ ] ')+x.t;
+    return ['FICHA DE DOCUMENTAÇÃO — '+t.nome+(t.cargo?' ('+t.cargo+')':'')+' — '+f.tipo,'',
+      '1. ATIVIDADES QUE PRECISAM ESTAR NO CONTRATO', ...acts.map((a,i)=>(i+1)+'. '+a.nome),'',
+      '2. DOCUMENTOS DAS ATIVIDADES', ...req.filter(x=>x.g==='doc').map(linha),'',
+      '3. DOCUMENTOS ADMISSIONAIS', ...req.filter(x=>x.g==='adm').map(linha),'',
+      '4. EXAMES ADMISSIONAIS', ...req.filter(x=>x.g==='exa').map(linha),'',
+      '5. EXAMES PERIÓDICOS', ...exP.map(e=>'- '+e.nome+(e.vals.size?' — '+[...e.vals].join(' / '):'')),
+      ...(f.obs?['','OBSERVAÇÕES', f.obs]:[])].join('\n');
+  }
+  async function docCopiar(txt){
+    try{ await navigator.clipboard.writeText(txt); alert('Copiado. Cole no e-mail ou no WhatsApp.'); }
+    catch(e){ window.prompt('Copie o texto abaixo (Ctrl+C):', txt); }
+  }
+  function docSelecionar(id){
+    if(docDirty && !confirm('Há alterações não salvas nesta ficha. Descartar?')) return;
+    docSel=id; const f=DOC_FICHAS[id]; docDraft=JSON.parse(JSON.stringify(f||docBlank()));
+    if(!docDraft.recebidos) docDraft.recebidos={}; if(!docDraft.ans) docDraft.ans={};
+    docDirty=false; docQAberto=!f; render();
+  }
+  function docMudou(){ docDirty=true; render(); }
+
+  function renderDocumentacao(){
+    const wrap=el('div',{class:'doc-wrap'});
+    const pode=canEditDoc(currentUser.papel);
+    wrap.appendChild(el('h2',{}, 'Documentação de integração — Gerdau'));
+    wrap.appendChild(el('div',{class:'sub', style:'margin-bottom:10px;'}, pode
+      ? 'Responda o que cada técnico vai fazer. A ficha mostra as atividades que precisam estar no contrato do cliente e os documentos e exames a pedir — marque o que já foi recebido.'
+      : 'Visualização das fichas de documentação. Só RH, administrador e equipe podem alterar.'));
+    if(!DOC_REF || !DOC_FICHAS){
+      if(!docLoading && !docErro) loadDoc();
+      wrap.appendChild(docErro ? el('div',{class:'error-box'}, docErro, ' ', el('button',{class:'btn small', onclick:()=>{ docErro=''; loadDoc(); }}, 'Tentar de novo')) : el('div',{class:'empty'}, 'Carregando tabela Gerdau…'));
+      return wrap;
+    }
+    wrap.appendChild(el('div',{class:'doc-modes'},
+      el('button',{class:docModo==='tecnico'?'on':'', onclick:()=>{ docModo='tecnico'; render(); }}, 'Por técnico'),
+      el('button',{class:docModo==='projeto'?'on':'', onclick:()=>{ docModo='projeto'; render(); }}, 'Por projeto (o que liberar no contrato)'),
+      el('span',{class:'sub', style:'align-self:center; margin-left:auto;'}, 'Fonte: Anexo 3.2 Gerdau Unificação '+DOC_REF.versao)
+    ));
+    wrap.appendChild(docModo==='projeto' ? renderDocProjeto() : renderDocTecnico(pode));
+    return wrap;
+  }
+
+  function renderDocTecnico(pode){
+    const grid=el('div',{class:'doc-grid'});
+    const lista=el('div',{});
+    lista.appendChild(el('input',{type:'text', class:'doc-search', placeholder:'Buscar técnico…', value:docBusca, oninput:(e)=>{ docBusca=e.target.value; const v=dNorm(docBusca); lista.querySelectorAll('.doc-tec').forEach(b=>b.style.display=dNorm(b.dataset.n).includes(v)?'':'none'); }}));
+    const col=el('div',{class:'doc-list'});
+    const v=dNorm(docBusca);
+    [...TECNICOS].sort((a,b)=>a.nome.localeCompare(b.nome,'pt')).forEach(t=>{
+      const f=DOC_FICHAS[t.id], pr=docProgresso(f);
+      col.appendChild(el('button',{class:'doc-tec'+(docSel===t.id?' sel':''), 'data-n':t.nome, style:v&&!dNorm(t.nome).includes(v)?'display:none':'', onclick:()=>docSelecionar(t.id)},
+        el('b',{}, t.nome), el('span',{}, (t.cargo||'—')+' · '+(f ? docActs(f).length+' atividade(s) · '+pr.ok+'/'+pr.total+' recebidos' : 'sem ficha')),
+        f && pr.total ? el('div',{class:'doc-prog'}, el('i',{style:'width:'+Math.round(pr.ok/pr.total*100)+'%'})) : null));
+    });
+    if(!TECNICOS.length) col.appendChild(el('div',{class:'empty'}, 'Nenhum técnico cadastrado.'));
+    lista.appendChild(col);
+    grid.appendChild(lista);
+    const t=TECNICOS.find(x=>x.id===docSel);
+    grid.appendChild(t && docDraft ? renderDocFicha(t, pode) : el('div',{class:'doc-card'}, el('div',{class:'empty'}, 'Escolha um técnico na lista para ver ou preencher a ficha.')));
+    return grid;
+  }
+
+  function renderDocFicha(t, pode){
+    const f=docDraft, salvo=DOC_FICHAS[t.id];
+    const acts=docActs(f), pend=docPendentes(f), req=docRequisitos(f), exP=docExames(acts,'per');
+    const aso=[...new Set(acts.map(a=>(String(a.obs||'').match(/ASO deve conter[^.]*\./i)||[])[0]).filter(Boolean))];
+    const tipos=[...new Set(DOC_REF.adm.map(a=>a.tipo))];
+    const card=el('div',{class:'doc-card'});
+    card.appendChild(el('div',{class:'doc-head'},
+      el('div',{}, el('h3',{}, t.nome), el('div',{class:'sub'}, [t.cargo,t.local].filter(Boolean).join(' · ')),
+        salvo&&salvo.atualizadoEm ? el('div',{class:'sub', style:'margin-top:4px;'}, 'Atualizado por '+(salvo.atualizadoPor||'—')+' em '+new Date(salvo.atualizadoEm).toLocaleString('pt-BR')) : null),
+      el('div',{style:'display:flex; gap:12px; align-items:center;'}, el('span',{class:'doc-big'}, String(acts.length)), el('span',{class:'sub'}, 'atividade(s) para', el('br',{}), 'liberar no contrato'))
+    ));
+
+    // dados de contratação
+    const sTipo=selectEl(f.tipo, tipos, v=>{ f.tipo=v; docMudou(); }); if(!pode) sTipo.disabled=true;
+    card.appendChild(el('div',{class:'doc-sec'},
+      el('div',{class:'row2'},
+        el('div',{class:'field'}, el('label',{}, 'Tipo de contratação'), sTipo),
+        el('div',{class:'field checkbox-field', style:'align-self:flex-end;'},
+          el('input',{type:'checkbox', id:'doc-vpn', checked:f.vpn, disabled:!pode, onchange:(e)=>{ f.vpn=e.target.checked; docMudou(); }}),
+          el('label',{for:'doc-vpn'}, 'Vai ter acesso à VPN da Gerdau (exige Termo de Confidencialidade)')))
+    ));
+
+    // questionário
+    const qs=el('div',{class:'doc-sec'});
+    qs.appendChild(el('h4',{}, 'O que o técnico vai fazer?', el('small',{}, docQAberto?'':'(respostas escondidas)'),
+      el('button',{class:'btn ghost small', style:'margin-left:auto;', onclick:()=>{ docQAberto=!docQAberto; render(); }}, docQAberto?'Esconder perguntas':'Mostrar perguntas')));
+    if(docQAberto) DOC_REF.qs.forEach((q,i)=>{
+      const a=f.ans[q.id]||{}; const sel=a.sel||[];
+      const setA=()=>f.ans[q.id]||(f.ans[q.id]={sel:[]});
+      const chips=(tipo)=>el('div',{class:'doc-chips'}, q.opts.map((o,j)=>{
+        const on=o[1].every(n=>sel.includes(n));
+        return el('label',{class:'doc-chip'+(on?' on':'')},
+          el('input',{type:tipo, name:'doc-'+q.id, checked:on, disabled:!pode, onchange:(e)=>{ const A=setA();
+            if(q.type==='one') A.sel=[...o[1]]; else A.sel=e.target.checked ? [...new Set([...A.sel,...o[1]])] : A.sel.filter(n=>!o[1].includes(n));
+            docMudou(); }}), o[0]); }));
+      const row=el('div',{class:'doc-q'});
+      if(q.type==='one'){ row.appendChild(el('div',{class:'doc-qh'}, el('span',{}, (i+1)+'. '+q.q))); row.appendChild(chips('radio')); qs.appendChild(row); return; }
+      row.appendChild(el('div',{class:'doc-qh'}, el('span',{}, (i+1)+'. '+q.q),
+        el('div',{class:'doc-yn'},
+          el('button',{class:'s'+(a.yes===true?' on':''), disabled:!pode, onclick:()=>{ setA().yes=true; docMudou(); }}, 'Sim'),
+          el('button',{class:a.yes===false?'on':'', disabled:!pode, onclick:()=>{ const A=setA(); A.yes=false; A.sel=[]; docMudou(); }}, 'Não'))));
+      if(a.yes && q.help) row.appendChild(el('div',{class:'doc-hint'}, q.help));
+      if(a.yes && q.opts){ row.appendChild(el('div',{class:'doc-hint'}, q.optLabel||'Qual? (marque todas que se aplicam)')); row.appendChild(chips('checkbox')); }
+      if(a.yes && q.opts && !q.base && !sel.length) row.appendChild(el('div',{class:'doc-warn'}, 'Marque pelo menos uma opção.'));
+      qs.appendChild(row);
+    });
+    card.appendChild(qs);
+    if(pend.length) card.appendChild(el('div',{class:'doc-sec'}, el('div',{class:'doc-warn', style:'margin:0;'}, 'Falta escolher o tipo em: '+pend.map(q=>q.q).join(' · '))));
+
+    // 1. atividades no contrato
+    card.appendChild(el('div',{class:'doc-sec'}, el('h4',{}, '1. Atividades que precisam estar no contrato', el('small',{}, 'nome igual ao do cadastro Bancodoc')),
+      acts.length ? el('ol',{class:'doc-ol'}, acts.map(a=>el('li',{}, a.nome))) : el('div',{class:'sub'}, 'Responda as perguntas acima.')));
+
+    const check=(x, extra)=>{ const ok=!!f.recebidos[x.k];
+      return el('div',{},
+        el('label',{class:'doc-check'+(ok?' ok':'')},
+          el('input',{type:'checkbox', checked:ok, disabled:!pode, onchange:(e)=>{ if(e.target.checked) f.recebidos[x.k]=true; else delete f.recebidos[x.k]; docMudou(); }}),
+          el('span',{}, x.t, x.de ? el('small',{}, x.de.join('; ')) : null)),
+        extra||null); };
+    const secReq=(titulo, g, vazio, extraFn)=>{ const l=req.filter(x=>x.g===g); const ok=l.filter(x=>f.recebidos[x.k]).length;
+      return el('div',{class:'doc-sec'}, el('h4',{}, titulo, el('small',{}, l.length ? ok+' de '+l.length+' recebido(s)' : '')),
+        l.length ? l.map(x=>check(x, extraFn&&extraFn(x))) : el('div',{class:'sub'}, vazio)); };
+
+    const s2=secReq('2. Documentos das atividades','doc','Nenhum documento específico exigido.');
+    acts.filter(a=>!/n[ãa]o [ée] solicitado/i.test(a.docs) || a.obs).forEach(a=>s2.appendChild(el('details',{class:'doc-det'},
+      el('summary',{}, 'Carga horária e detalhes: '+dShort(a.nome)),
+      el('div',{}, el('b',{}, 'Documentos'), a.docs, el('b',{}, 'Carga horária e validade'), a.carga, a.obs ? el('b',{}, 'Observação') : null, a.obs||null))));
+    card.appendChild(s2);
+
+    const s3=secReq('3. Documentos admissionais — '+f.tipo,'adm','Sem documentos para este tipo.', x=>el('details',{class:'doc-det', style:'margin-top:4px;'}, el('summary',{}, 'Critérios mínimos'), el('div',{}, x.crit)));
+    if(req.some(x=>x.g==='adm' && /CTPS|e-Social/i.test(x.t))) s3.appendChild(el('div',{class:'doc-hint'}, 'CTPS Digital OU Comprovante do Lançamento no e-Social — qualquer um dos dois vale.'));
+    if(!f.vpn) s3.appendChild(el('div',{class:'doc-hint'}, 'Termo de Confidencialidade não entra: só é exigido para quem acessa a VPN.'));
+    card.appendChild(s3);
+
+    const s4=secReq('4. Exames admissionais','exa','Nenhum exame específico — vale o ASO.');
+    aso.forEach(o=>s4.appendChild(el('div',{class:'doc-warn'}, o)));
+    card.appendChild(s4);
+    card.appendChild(el('div',{class:'doc-sec'}, el('h4',{}, '5. Exames periódicos', el('small',{}, 'para acompanhar o vencimento')),
+      exP.length ? el('ul',{class:'doc-ol'}, exP.map(e=>el('li',{}, e.nome+(e.vals.size?' — '+[...e.vals].join(' / '):'')))) : el('div',{class:'sub'}, 'Nenhum exame periódico específico.')));
+
+    card.appendChild(el('div',{class:'doc-sec'}, el('div',{class:'field', style:'margin:0;'}, el('label',{}, 'Observações do RH'),
+      el('textarea',{disabled:!pode, placeholder:'Ex.: ASO agendado para 02/12; aguardando certificado NR 35.', oninput:(e)=>{ f.obs=e.target.value; docDirty=true; }}, f.obs||''))));
+
+    card.appendChild(el('div',{class:'doc-bar'},
+      pode ? el('button',{class:'btn', disabled:docBusy, onclick: async ()=>{
+        docBusy=true; render();
+        try{ const r=await api('/api/documentacao?tecnicoId='+encodeURIComponent(t.id), {method:'PUT', body:JSON.stringify({ficha:docDraft})});
+          DOC_FICHAS[t.id]=r.ficha; docDraft=JSON.parse(JSON.stringify(r.ficha)); docDirty=false; }
+        catch(e){ alert(e.error||'Erro ao salvar.'); }
+        docBusy=false; render(); }}, docBusy?'Salvando…':'Salvar ficha') : null,
+      pode && docDirty ? el('button',{class:'btn ghost', onclick:()=>{ docDirty=false; docSelecionar(t.id); }}, 'Descartar alterações') : null,
+      el('button',{class:'btn ghost', onclick:()=>docCopiar(docFichaTexto(t,f))}, 'Copiar ficha'),
+      docDirty ? el('span',{class:'doc-warn', style:'margin:0;'}, 'Alterações não salvas') : null
+    ));
+    return card;
+  }
+
+  function renderDocProjeto(){
+    const box=el('div',{});
+    const ativos=PROJETOS.filter(p=>p.status!=='Concluído');
+    const lista=ativos.length ? ativos : PROJETOS;
+    if(!lista.length){ box.appendChild(el('div',{class:'empty'}, 'Nenhum projeto cadastrado.')); return box; }
+    if(!lista.some(p=>p.id===docProj)) docProj=lista[0].id;
+    const p=PROJETOS.find(x=>x.id===docProj);
+    box.appendChild(el('div',{class:'manage-form'},
+      el('div',{class:'field'}, el('label',{}, 'Projeto / obra'), selectEl(docProj, lista, v=>{ docProj=v; render(); }, x=>x.nome+(x.cliente&&x.cliente!=='—'?' — '+x.cliente:'')))));
+    const hoje=toISO(new Date());
+    const ids=[...new Set(allocations.filter(a=>a.projetoId===docProj && a.tipo!=='Indisponibilidade' && (!a.fim || a.fim>=hoje)).map(a=>a.tecnicoId))];
+    const tecs=ids.map(id=>TECNICOS.find(t=>t.id===id)).filter(Boolean);
+    if(!tecs.length){ box.appendChild(el('div',{class:'empty'}, 'Nenhum técnico alocado (atual ou futuro) em '+(p?p.nome:'este projeto')+'.')); return box; }
+    const mapa=new Map(); const semFicha=[];
+    tecs.forEach(t=>{ const f=DOC_FICHAS[t.id]; if(!f){ semFicha.push(t.nome); return; } docActs(f).forEach(a=>{ if(!mapa.has(a.nome)) mapa.set(a.nome,[]); mapa.get(a.nome).push(t.nome); }); });
+    const rows=[...mapa.entries()].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'pt'));
+    if(semFicha.length) box.appendChild(el('div',{class:'warn-box'}, 'Sem ficha preenchida ainda: '+semFicha.join(', ')+'. Preencha em "Por técnico" para entrarem na lista.'));
+    box.appendChild(el('h4',{style:'margin:14px 0 8px;'}, 'Atividades que precisam estar no contrato — '+(p?p.nome:'')));
+    box.appendChild(rows.length ? el('table',{class:'doc-table'},
+      el('thead',{}, el('tr',{}, el('th',{}, 'Atividade (nome no cadastro Bancodoc)'), el('th',{}, 'Técnicos'))),
+      el('tbody',{}, rows.map(([n,ps])=>el('tr',{}, el('td',{}, n), el('td',{}, ps.join(', ')))))) : el('div',{class:'empty'}, 'Nenhuma atividade definida nas fichas desses técnicos.'));
+    box.appendChild(el('h4',{style:'margin:18px 0 8px;'}, 'Situação da documentação'));
+    box.appendChild(el('table',{class:'doc-table'},
+      el('thead',{}, el('tr',{}, el('th',{}, 'Técnico'), el('th',{}, 'Atividades'), el('th',{}, 'Recebidos'), el('th',{}, ''))),
+      el('tbody',{}, tecs.map(t=>{ const f=DOC_FICHAS[t.id], pr=docProgresso(f);
+        return el('tr',{}, el('td',{}, t.nome), el('td',{}, f?String(docActs(f).length):'—'), el('td',{}, f?pr.ok+' de '+pr.total:'sem ficha'),
+          el('td',{}, el('button',{class:'btn ghost small', onclick:()=>{ docModo='tecnico'; docSelecionar(t.id); }}, f?'Abrir ficha':'Preencher'))); }))));
+    box.appendChild(el('div',{style:'margin-top:14px;'}, el('button',{class:'btn ghost', onclick:()=>docCopiar(['ATIVIDADES A LIBERAR NO CONTRATO — '+(p?p.nome:''),...rows.map(([n,ps])=>'- '+n+' — '+ps.join(', ')), ...(semFicha.length?['','Sem ficha: '+semFicha.join(', ')]:[])].join('\n'))}, 'Copiar lista para o contrato')));
+    return box;
   }
 
   /* ================= gerenciar usuários (admin) ================= */

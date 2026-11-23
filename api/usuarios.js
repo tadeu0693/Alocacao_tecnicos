@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { getJSON } from './_lib/db.js';
 import { getUserFromReq, getUsers, saveUsers, hashPassword, sendDbError, publicUser } from './_lib/auth.js';
 
-const PAPEIS = ['admin', 'editor', 'planejador', 'supervisor', 'visualizador', 'tecnico'];
+const PAPEIS = ['admin', 'editor', 'planejador', 'supervisor', 'visualizador', 'rh', 'tecnico'];
 
 export default async function handler(req, res) {
   try {
